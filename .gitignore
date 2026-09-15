@@ -14,3 +14,8 @@ dist/
 .env
 .env.*
 !.env.example
+
+# Local project instructions and documentation.
+/AGENTS.md
+/agents.md
+/docs/

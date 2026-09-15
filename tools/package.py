@@ -20,7 +20,7 @@ with zipfile.ZipFile(target,'w',zipfile.ZIP_DEFLATED,compresslevel=9) as archive
         info.external_attr=0o644<<16
         archive.writestr(info,path.read_bytes())
     for name in ('usage.md','output-format.md'):
-        path=ROOT/'docs'/name
+        path=ROOT/name
         info=zipfile.ZipInfo('docs/'+name,date_time=(2026,9,14,0,0,0))
         info.compress_type=zipfile.ZIP_DEFLATED
         archive.writestr(info,path.read_bytes())
@@ -30,12 +30,11 @@ print(json.dumps({'archive':str(target),'bytes':target.stat().st_size,'sha256':d
 
 # Companion development bundle: no fixture, generated images, or installed cache.
 source_target=OUT/f"anime_sdf_gen-{manifest['version']}-source.zip"
-files=[ROOT/'README.md',ROOT/'AGENTS.md']
-for folder in ('anime_sdf_gen','tests','tools','docs'):
+files=[ROOT/name for name in ('README.md','usage.md','output-format.md','validation.md')]
+for folder in ('anime_sdf_gen','tests','tools'):
     files.extend(path for path in (ROOT/folder).rglob('*')
                  if path.is_file() and '__pycache__' not in path.parts and path.suffix!='.pyc'
-                 and path.name not in ('blender_character_toon.py','setup_character_toon.py')
-                 and (not path.name.startswith('plan_') or path.name in ('plan_anime-sdf-gen-full-sweeps.md','plan_anime-sdf-gen-curve-controls.md','plan_anime-sdf-gen-restore-preview.md')))
+                 and path.name not in ('blender_character_toon.py','setup_character_toon.py'))
 with zipfile.ZipFile(source_target,'w',zipfile.ZIP_DEFLATED,compresslevel=9) as archive:
     for path in sorted(files):
         info=zipfile.ZipInfo(path.relative_to(ROOT).as_posix(),date_time=(2026,9,14,0,0,0))

@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+build/
+dist/
+*.blend1
+*.blend2
+
+# Local models and authored outputs are not part of the source release.
+*.blend
+/face_sdf.png
+/face_sdf.sdfproject.json
+
+# Local credentials and environment configuration.
+.env
+.env.*
+!.env.example

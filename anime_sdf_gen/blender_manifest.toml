@@ -1,0 +1,15 @@
+schema_version = "1.0.0"
+id = "anime_sdf_gen"
+version = "0.14.0"
+name = "Anime SDF Gen"
+tagline = "Author face shadow thresholds with curves and live projection"
+maintainer = "xht8723"
+website = "https://github.com/xht8723"
+type = "add-on"
+tags = ["Material", "Paint", "UV"]
+blender_version_min = "5.2.0"
+license = ["SPDX:GPL-3.0-or-later"]
+[permissions]
+files = "Save threshold textures, editable projects, and recovery drafts"
+[build]
+paths_exclude_pattern = ["__pycache__/", "*.pyc", ".*", "tests/"]

@@ -2,7 +2,7 @@
 
 A Blender add-on for creating anime-style face-shadow textures. Define shadow shapes with editable curves, preview them on your model at different light angles, and export the maps for use in a character shader.
 
-[Download v0.14.0](https://github.com/xht8723/sdf_gen/releases/download/v0.14.0/anime_sdf_gen-0.14.0.zip) · [Usage guide](https://github.com/xht8723/sdf_gen/blob/main/docs/usage.md)
+[Download v0.14.0](https://github.com/xht8723/Anime-SDF-Gen/releases/download/v0.14.0/anime_sdf_gen-0.14.0.zip) · [Usage guide](https://github.com/xht8723/Anime-SDF-Gen/blob/main/docs/usage.md)
 
 ## Features
 
@@ -19,7 +19,7 @@ A Blender add-on for creating anime-style face-shadow textures. Define shadow sh
 
 Requires **Blender 5.2 or newer**. Tested on **Windows**.
 
-1. Download the extension ZIP from the [latest release](https://github.com/xht8723/sdf_gen/releases/latest).
+1. Download the extension ZIP from the [latest release](https://github.com/xht8723/Anime-SDF-Gen/releases/latest).
 2. In Blender Preferences, use **Install from Disk** and select the ZIP.
 
 ## Basic workflow
@@ -34,11 +34,11 @@ The export includes PNG textures and an editable project file. Shader setup is m
 
 ## Documentation
 
-- [Usage and controls](https://github.com/xht8723/sdf_gen/blob/main/docs/usage.md)
-- [Texture and project format](https://github.com/xht8723/sdf_gen/blob/main/docs/output-format.md)
-- [Validation details](https://github.com/xht8723/sdf_gen/blob/main/docs/validation.md)
-- [Report an issue](https://github.com/xht8723/sdf_gen/issues)
+- [Usage and controls](https://github.com/xht8723/Anime-SDF-Gen/blob/main/docs/usage.md)
+- [Texture and project format](https://github.com/xht8723/Anime-SDF-Gen/blob/main/docs/output-format.md)
+- [Validation details](https://github.com/xht8723/Anime-SDF-Gen/blob/main/docs/validation.md)
+- [Report an issue](https://github.com/xht8723/Anime-SDF-Gen/issues)
 
 ## License
 
-[GPL-3.0-or-later](https://github.com/xht8723/sdf_gen/blob/main/anime_sdf_gen/LICENSE). Maintained by [xht8723](https://github.com/xht8723).
+[GPL-3.0-or-later](https://github.com/xht8723/Anime-SDF-Gen/blob/main/anime_sdf_gen/LICENSE). Maintained by [xht8723](https://github.com/xht8723).

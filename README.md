@@ -4,6 +4,12 @@ A Blender add-on for creating anime-style face-shadow textures. Define shadow sh
 
 [Download v0.14.0](https://github.com/xht8723/Anime-SDF-Gen/releases/download/v0.14.0/anime_sdf_gen-0.14.0.zip) · [Usage guide](usage.md)
 
+## Demo
+
+Face shadows under a moving light, followed by boundary and cutout editing with the live preview.
+
+https://github.com/user-attachments/assets/7cbefedc-edcd-4a6f-b7d6-56ef065f0153
+
 ## Features
 
 - Editable Bézier curves for shadow boundaries.

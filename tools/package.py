@@ -1,46 +1,74 @@
-"""Build the extension archive without bundling the model or test outputs."""
+"""Deterministic extension and source bundles; importing does not write files."""
+
 from pathlib import Path
 import hashlib
 import json
-import sys
 import tomllib
 import zipfile
 
-ROOT=Path(__file__).resolve().parents[1]
-PACKAGE=ROOT/'anime_sdf_gen'
-manifest=tomllib.loads((PACKAGE/'blender_manifest.toml').read_text(encoding='utf-8'))
-OUT=ROOT/'dist';OUT.mkdir(exist_ok=True)
-target=OUT/f"anime_sdf_gen-{manifest['version']}.zip"
-with zipfile.ZipFile(target,'w',zipfile.ZIP_DEFLATED,compresslevel=9) as archive:
-    for path in sorted(PACKAGE.rglob('*')):
-        if not path.is_file() or '__pycache__' in path.parts or path.suffix=='.pyc':continue
-        rel=path.relative_to(PACKAGE).as_posix()
-        info=zipfile.ZipInfo(rel,date_time=(2026,9,14,0,0,0))
-        info.compress_type=zipfile.ZIP_DEFLATED
-        info.external_attr=0o644<<16
-        archive.writestr(info,path.read_bytes())
-    for name in ('usage.md','output-format.md'):
-        path=ROOT/name
-        info=zipfile.ZipInfo('docs/'+name,date_time=(2026,9,14,0,0,0))
-        info.compress_type=zipfile.ZIP_DEFLATED
-        archive.writestr(info,path.read_bytes())
-digest=hashlib.sha256(target.read_bytes()).hexdigest()
-(OUT/(target.name+'.sha256')).write_text(digest+'  '+target.name+'\n',encoding='ascii')
-print(json.dumps({'archive':str(target),'bytes':target.stat().st_size,'sha256':digest}))
+ROOT = Path(__file__).resolve().parents[1]
+DOCS = (
+    "README.md",
+    "usage.md",
+    "output-format.md",
+    "validation.md",
+    "architecture.md",
+    "cleanup-audit.md",
+    "usage.zh-Hans.md",
+    "i18n-development.md",
+)
+TOOLS = ("package.py", "validate.py", "verify_release.py", "check_i18n.py")
+EXCLUDED_TESTS = {"blender_character_toon.py"}
 
-# Companion development bundle: no fixture, generated images, or installed cache.
-source_target=OUT/f"anime_sdf_gen-{manifest['version']}-source.zip"
-files=[ROOT/name for name in ('README.md','usage.md','output-format.md','validation.md')]
-for folder in ('anime_sdf_gen','tests','tools'):
-    files.extend(path for path in (ROOT/folder).rglob('*')
-                 if path.is_file() and '__pycache__' not in path.parts and path.suffix!='.pyc'
-                 and path.name not in ('blender_character_toon.py','setup_character_toon.py'))
-with zipfile.ZipFile(source_target,'w',zipfile.ZIP_DEFLATED,compresslevel=9) as archive:
-    for path in sorted(files):
-        info=zipfile.ZipInfo(path.relative_to(ROOT).as_posix(),date_time=(2026,9,14,0,0,0))
-        info.compress_type=zipfile.ZIP_DEFLATED
-        info.external_attr=0o644<<16
-        archive.writestr(info,path.read_bytes())
-source_digest=hashlib.sha256(source_target.read_bytes()).hexdigest()
-(OUT/(source_target.name+'.sha256')).write_text(source_digest+'  '+source_target.name+'\n',encoding='ascii')
-print(json.dumps({'source_archive':str(source_target),'bytes':source_target.stat().st_size,'sha256':source_digest}))
+
+def write_archive(target, entries):
+    with zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
+        for name, path in sorted(entries):
+            info = zipfile.ZipInfo(name, date_time=(2026, 9, 14, 0, 0, 0))
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.external_attr = 0o644 << 16
+            archive.writestr(info, path.read_bytes())
+    digest = hashlib.sha256(target.read_bytes()).hexdigest()
+    target.with_name(target.name + ".sha256").write_text(
+        digest + "  " + target.name + "\n", encoding="ascii"
+    )
+    return {"file": str(target), "bytes": target.stat().st_size, "sha256": digest}
+
+
+def main():
+    package = ROOT / "anime_sdf_gen"
+    version = tomllib.loads((package / "blender_manifest.toml").read_text())["version"]
+    out = ROOT / "dist"
+    out.mkdir(exist_ok=True)
+    package_files = [
+        p
+        for p in package.rglob("*")
+        if p.is_file()
+        and (p.suffix == ".py" or p.name in ("blender_manifest.toml", "LICENSE", "NOTICE"))
+    ]
+    extension = [(p.relative_to(package).as_posix(), p) for p in package_files]
+    extension.extend(
+        ("docs/" + name, ROOT / name)
+        for name in ("usage.md", "usage.zh-Hans.md", "output-format.md")
+    )
+    tests = [p for p in (ROOT / "tests").glob("*.py") if p.name not in EXCLUDED_TESTS]
+    tests.extend((ROOT / "tests/data").glob("*.npz"))
+    source = (
+        package_files
+        + tests
+        + [ROOT / "tools" / name for name in TOOLS]
+        + [ROOT / name for name in DOCS]
+    )
+    results = [
+        write_archive(out / f"anime_sdf_gen-{version}.zip", extension),
+        write_archive(
+            out / f"anime_sdf_gen-{version}-source.zip",
+            [(p.relative_to(ROOT).as_posix(), p) for p in source],
+        ),
+    ]
+    print(json.dumps(results, indent=2))
+    return results
+
+
+if __name__ == "__main__":
+    main()

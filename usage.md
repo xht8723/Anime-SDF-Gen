@@ -1,10 +1,10 @@
 # Anime SDF Gen — usage
 
-Version **0.14.0**, maintained by [xht8723](https://github.com/xht8723). Blender **5.2 LTS** on Windows.
+Version **0.16.0**, maintained by [xht8723](https://github.com/xht8723). Blender **5.2 LTS** on Windows.
 
 ## Install and create
 
-In **Edit → Preferences → Get Extensions**, open the menu and choose **Install from Disk**. Select `anime_sdf_gen-0.14.0.zip` and enable **Anime SDF Gen**. In the original 3D View, press **N** and open **Anime SDF Gen**.
+In **Edit → Preferences → Get Extensions**, open the menu and choose **Install from Disk**. Select `anime_sdf_gen-0.16.0.zip` and enable **Anime SDF Gen**. In the original 3D View, press **N** and open **Anime SDF Gen**.
 
 Close any authoring session before replacing the installed extension. Restart Blender after installing the new build so its Python modules load fresh.
 
@@ -16,6 +16,14 @@ Use one source method:
 Choose **Shadow keyframes** (default nine per complete sweep), then click **Create**. The selected polygon IDs and active UV map are captured. Later selection changes do not silently change the authoring region. Keyframe count can also be changed inside the popup before fitting.
 
 For the supplied fixture, select polygons assigned to `head` on `body` using Blender's material selection controls. These names are a fixture convenience; the add-on has no material-name requirement.
+
+## Language
+
+The same extension contains English and Simplified Chinese. In **Edit → Preferences → Interface → Language**, choose **Chinese (Simplified)** or Blender’s **Automatic** setting. Anime SDF Gen follows Blender’s effective language; unsupported add-on languages fall back to English.
+
+Blender’s **Interface**, **Tooltips** and **Reports** translation options apply independently. Changing language updates the open editor and retained warnings without restarting it or changing artwork, selection, history, playback or a running export. Native dialogs follow Blender’s own redraw behavior. Object names, UVs, vertex groups, filenames and project metadata remain literal. Language changes do not alter texture values.
+
+See the [Simplified Chinese guide](usage.zh-Hans.md). Updating the extension requires a fresh module load as described above; switching language does not.
 
 ## The floating popup
 
@@ -84,7 +92,7 @@ Drag the rotation slider or click **Play 360°**. One orbit takes 12 seconds, pa
 
 Choosing a keyframe or editing artwork pauses playback. **Shaded preview / Flat mask**, beside **Focus** in the live preview header, changes its appearance. In a narrow header it becomes a circular shading icon with the same tooltip and behavior.
 
-The shadow preview uses the original **0.10.0** appearance: warm lit regions, cool shadow regions, and smooth surface lighting that follows the light sweep. **Flat mask** displays the lit/shadow boundary in black and white. The projection remains attached to the head when you orbit the preview. Preview shading is never baked into exported textures or assigned to source materials; copied source materials remain available in the reference view.
+The shadow preview uses warm lit regions, cool shadow regions, and smooth surface lighting that follows the light sweep. **Flat mask** displays the lit/shadow boundary in black and white. The projection remains attached to the head when you orbit the preview. Preview shading is never baked into exported textures or assigned to source materials; copied source materials remain available in the reference view.
 
 The current keyframe's projected **512-pixel mask**, including carried lit cutouts, updates immediately while dragging. After editing pauses, cached distance fields calculate the interpolated sweep. Playback decodes those thresholds into the displayed mask; it does not rebuild distance fields every frame. A new edit or cancellation discards unfinished interpolation work. There is one preview implementation, with no live UV-texture/toon mode retained.
 
@@ -96,15 +104,21 @@ The two first masks meet at Front; the two last masks meet at Back. If their art
 
 In **Confirm**, click the **Save location** field to choose a folder and file name in Blender's file browser. The **File name** and **Texture resolution** fields can also be edited separately.
 
-Under **Output packing · PNG 16-bit**, each map has **R / G / B / Separate** buttons:
+**Output precision** applies to every generated texture: **8-bit PNG**, **16-bit PNG** (default), or **32-bit Float EXR**. Depth is per channel. The live preview uses floating-point thresholds; bit-depth quantization is applied during export. 8-bit saves space but can produce coarser sweep transitions; 32-bit stores the calculated floating-point precision in larger, uncompressed EXR files. The destination extension and file list follow this choice.
+
+**Smoothing** defaults to **Off / 0**. Drag its slider from 0 to 8, or click the number for precise entry. Escape cancels a slider drag; cancelling the numeric dialog restores its starting value. Confirm playback updates after a short pause in adjustment. Smoothing can change small lit cutouts and shadow timing; it does not make a hard-cutoff shader produce soft edges. Always-lit/shadowed pixels and face coverage are preserved. The amount scales with resolution, so the low-resolution preview approximates the same effect as export. Set 0 to restore the unsmoothed result.
+
+Under **Output packing**, each map has **R / G / B / Separate** buttons:
 
 - **Left shadow** is the threshold for lighting from the character's left. It defaults to R.
 - **Right shadow** is the threshold for lighting from the character's right. It defaults to G.
 - **Face coverage** marks the supported face in UV space. It defaults to B.
 
-Choose any RGB channel for each map. Selecting an occupied channel swaps its two map assignments. **Separate** writes that map as a single-channel 16-bit grayscale PNG. Mix packed and separate maps, or store all three separately. Empty packed channels are zero. These choices update the file list and its channel labels immediately while playback continues.
+Choose any RGB channel for each map. Selecting an occupied channel swaps its two map assignments. **Separate** writes that map as a single-channel image at the selected precision. Mix packed and separate maps, or store all three separately. Empty packed channels are zero. These choices update the file list and its channel labels immediately while playback continues.
 
-Packed maps share `<stem>.png`. Individual maps use `<stem>_left.png`, `<stem>_right.png`, and `<stem>_coverage.png`. The editable project is `<stem>.sdfproject.json`; it records the actual file/channel mapping. Load every texture as **Non-Color**.
+Packed maps share `<stem>.png` or `<stem>.exr`. Individual maps use the suffixes `_left`, `_right`, and `_coverage` with the selected extension. The editable project is `<stem>.sdfproject.json`; it records the actual file/channel mapping. Load every texture as **Non-Color**.
+
+Projects use schema 4. Projects from older releases are rejected without modifying their files; create a new project with this release.
 
 **Generate & Finish** stages and verifies all listed files, commits the set, then closes the popup. Existing files in the chosen output set receive an overwrite confirmation. Export errors appear in the warning footer and retain Confirm; **Cancel Generation** stops work and keeps the session. Use the back arrow to adjust curves again.
 
@@ -114,7 +128,7 @@ All owned preview meshes, materials, images, scenes, internal UI data, handlers,
 - **Discard & Close** or the window's **X** removes the active automatic draft. Explicitly saved projects and generated files remain.
 - **Edit Existing SDF** opens projects in this release's schema. On source mismatch, choose the active selection/group, reopen, and enable **Relink to Active Source** in the file browser. Review orientation and fit before generating.
 
-Automatic drafts live outside the `.blend`, under `anime_sdf_gen/v3/drafts/` in Blender's user configuration directory. Saving a `.blend` cancels any unconfirmed curve transform, removes the popup and preview before serialization, then rebuilds them after success or failure. The current step, confirmed artwork, point selection, output packing, local history, cameras and rotation/playback state are retained; interrupted generation can be started again. Loading another file or disabling the add-on preserves a recovery draft. **Recover Latest Draft** opens the newest current-schema draft. Reopening a Confirm project starts its orbit at Front; reopening curve editing selects keyframe 1 of Left → Right.
+Automatic drafts live outside the `.blend`, under `anime_sdf_gen/v4/drafts/` in Blender's user configuration directory. Saving a `.blend` cancels any unconfirmed curve transform, removes the popup and preview before serialization, then rebuilds them after success or failure. The current step, confirmed artwork, point selection, output packing, local history, cameras and rotation/playback state are retained; interrupted generation can be started again. Loading another file or disabling the add-on preserves a recovery draft. **Recover Latest Draft** opens the newest current-schema draft. Reopening a Confirm project starts its orbit at Front; reopening curve editing selects keyframe 1 of Left → Right.
 
 Only the documented current schema is accepted. No project migrations or compatibility loaders are included. Existing authored files are preserved.
 

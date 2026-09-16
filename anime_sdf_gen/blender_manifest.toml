@@ -1,6 +1,6 @@
 schema_version = "1.0.0"
 id = "anime_sdf_gen"
-version = "0.14.0"
+version = "0.16.0"
 name = "Anime SDF Gen"
 tagline = "Author face shadow thresholds with curves and live projection"
 maintainer = "xht8723"

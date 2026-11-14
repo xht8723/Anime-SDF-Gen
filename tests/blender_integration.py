@@ -120,12 +120,8 @@ def run_all():
         )
     }
     fixture_hash = hashlib.sha256(RUN.fixture.read_bytes()).hexdigest()
-    try:
-        fixture_face(source, front_only=False)
-        raise AssertionError("Full-head UV overlaps were not rejected")
-    except ValueError as exc:
-        assert "Overlapping" in str(exc)
-        result["tests"].append("full-head UV overlap rejected")
+    assert len(fixture_face(source, front_only=False).uvs)
+    result["tests"].append("full-head UV overlaps accepted")
     for _ in range(3):
         s = create()
         assert s.scene != bpy.data.scenes["Scene"]

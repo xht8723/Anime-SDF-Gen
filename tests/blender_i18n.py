@@ -106,7 +106,7 @@ def workflow():
     shot(OUT, "01-orient-zh.png")
     click("NEXT")
     yield 0.2
-    assert s.stage == "FIT" and "放置标记。" in texts()
+    assert s.stage == "FIT" and "放置定位点。" in texts()
     assert {"鼻子", "嘴部中心", "下巴"} <= set(texts())
     shot(OUT, "02-markers-zh.png")
     click("NEXT")
@@ -151,8 +151,12 @@ def workflow():
     warning = s.error
     synchronous_switch(s, "en_US")
     assert s.error is warning and "The source has no UV map named" in s.editor.warning_text
-    v.use_translate_reports = False
     synchronous_switch(s, "zh_HANS")
+    # Blender resets translation preferences when selecting a new language.
+    # Toggle the report flag after the switch to test its independent effect.
+    v.use_translate_reports = False
+    s.refresh_language()
+    redraw()
     assert s.editor.warning_text.startswith("The source has no UV map named")
     v.use_translate_reports = True
     s.refresh_language()
@@ -165,7 +169,8 @@ def workflow():
     click("NEXT")
     yield 0.2
     assert s.stage == "CONFIRM" and s.playing
-    assert "确认。" in texts() and "生成并完成" in texts()
+    assert "确认。" in texts() and "导出并关闭" in texts()
+    assert "烘焙用 UV" in texts()
     initial_rotation = s.rotation
     synchronous_switch(s, "en_US")
     synchronous_switch(s, "zh_HANS")

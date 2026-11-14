@@ -87,7 +87,7 @@ def workflow():
     matrix = np.asarray(e.views["PREVIEW"].perspective_matrix) if CAPTURE else old["matrix"]
     data = {"matrix": matrix, "fingerprint": np.array(face.reference["fingerprint"])}
     samples = []
-    for i, index in enumerate((0, 4, 8)):
+    for index in (0, 4, 8):
         s.select_keyframe(model.LTR, index)
         for flat in (False, True):
             s.flat = flat

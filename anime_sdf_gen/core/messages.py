@@ -95,10 +95,10 @@ def diagnostic(error):
 
 def contour_label(name):
     """Present reserved generated names; never rewrite the stored name."""
-    match = re.fullmatch(r"(Main boundary|Triangle)( [2-9][0-9]*| 1[0-9]+)?((?: copy)*)", name)
+    match = re.fullmatch(r"(Main boundary|Shape)( [2-9][0-9]*| 1[0-9]+)?((?: copy)*)", name)
     if not match or (match[1] == "Main boundary" and match[2]):
         return raw(name)
-    value = msg(mark("Main boundary") if match[1] == "Main boundary" else mark("Triangle"))
+    value = msg(mark("Main boundary") if match[1] == "Main boundary" else mark("Shape"))
     if match[2]:
         value = msg("{name} {number}", name=value, number=match[2].strip())
     for _ in range(match[3].count(" copy")):

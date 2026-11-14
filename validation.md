@@ -1,4 +1,96 @@
-# Anime SDF Gen 0.16.0 — validation
+# Anime SDF Gen 0.20.0 — validation
+
+## GitHub release and Chinese wording — November 13, 2026
+
+The final 0.20.0 release uses `build/validation/release-0.20.0` for a complete run of the 32-check release matrix, including 79 numerical/tooling tests, the 448-template translation audit, real 2K/4K popup workflows, lifecycle checks, model exports, and package validation. The release verifier matches archive contents to the current source and checks the preserved model and authored-file hashes. Blender checks run only in disposable Blender 5.3.0 processes on Windows.
+
+The Chinese wording revision changes 173 display strings while retaining all 448 English source templates and schema 4. Labels, tooltips, disabled reasons, errors, progress messages, and the Chinese guide use consistent artist-facing terminology. Its focused validation passed nine localization unit tests, native translation/Unicode/export checks, and both localization and shape-sidebar workflows at 2K and 4K. Switching languages preserves artwork, custom names, selection, history, playback, caches and generated texture data.
+
+The final release assets include the installable extension ZIP, source ZIP and their SHA-256 files. Local models, recovery drafts, validation artifacts, the authored README draft, and the retired toon demo are excluded. The working tree and previous 0.20.0 archives are preserved in the release evidence's `baseline` directory.
+
+## Curve and point sidebar — November 13, 2026
+
+Evidence is under `build/validation/0.20.0`. The 32-check release matrix includes real 2K/4K sidebar workflows: list selection, independent list and property scrolling, clipped hit regions, attached shape and point actions, main-boundary protection, automatic row reveal, mirroring, undo/redo, focus/stage changes and English/Chinese layout. Existing artist, native-dialog, navigation, lifecycle and export checks remain in the matrix.
+
+The sidebar extends from the global toolbar to the bottom of the popup. The timeline stays below the authoring/preview views and does not overlap the sidebar. Source models and the authored README draft are verified against `baseline/baseline.json`; no project schema changes are required. Validation runs only in disposable Blender processes. See [full run](build/validation/0.20.0/run-all.json) and [release verification](build/validation/0.20.0/release.json).
+
+## Shape dock — November 13, 2026
+
+Evidence is under `build/validation/0.19.0`. The release matrix requires 32 checks, including real shape-dock workflows at 2K and 4K. These exercise list selection, mouse-wheel and scrollbar dragging, attached actions, main-boundary protection, automatic row reveal from canvas/frame selection, mirrored edits, undo/redo, stage/focus changes, error placement and Chinese layout. Existing artist, native-dialog, curve, navigation, localization, lifecycle and export workflows remain in the matrix.
+
+Validation runs only in disposable Blender processes; source model hashes and the authored README draft are recorded and verified against `baseline/baseline.json`. No project schema or authored data changes are required for this layout. See [full run](build/validation/0.19.0/run-all.json) and [release verification](build/validation/0.19.0/release.json).
+
+## Artist workflow — November 13, 2026
+
+Current evidence is under `build/validation/0.18.0`. Validation uses disposable Blender 5.3.0 processes with factory startup, isolated draft/temp folders, and no writes to the source models. The release verifier requires **30 checks**, including the two artist-workflow cases, **79 numerical/tooling tests**, and the **447-template** English/Chinese catalog.
+
+The artist workflows at **2560 × 1600** and **3840 × 2043** (requested height 2160) exercise:
+
+- First-frame guidance, neighboring-frame legends, light-angle tooltips, persistent mirrored-row labels, and separate editing/playback captions, including the unlocked right sweep's front endpoint.
+- Real held presses and releases for shape renaming and explicit refitting. Rename edits pass through native text controls; confirmation dialogs survive release and idle, cancel normally, and accept native confirmation clicks.
+- Mirrored names, rename undo/redo, invalid names and stale submissions, selected-point scope, and current-schema draft/reopen behavior.
+- Returning from changed setup without rebuilding curves; returning through orientation; explicit refit cancellation, stale snapshot rejection, replacement, and undo/redo.
+- Successful export retains the verified output paths after popup closure and project reopening. Cancelled generation leaves the completion record unchanged.
+
+The broader matrix covers source/UV validation, all four `bugs.blend` faces at 512 pixels, mirror locking, native dialogs, navigation and curve editing, frozen preview samples, localization, save/resume and window cleanup, output precision, larger exports, and manifest/ZIP import checks. See [full run](build/validation/0.18.0/run-all.json) and [release verification](build/validation/0.18.0/release.json).
+
+The initial working tree is archived under `baseline/working-tree.zip`. `bugs.blend` was saved externally after that initial snapshot and before any validation process; its newer bytes were retained. Both the initial and subsequent preservation hashes are recorded in `baseline`. `test_sdf.blend` and the authored README draft are checked unchanged.
+
+## Release cleanup — November 13, 2026
+
+Validation for the cleanup release uses disposable **Blender 5.3.0** processes on Windows. Current evidence is under `build/validation/0.17.0`; the pre-audit source and authored-file hashes are preserved in its `baseline` folder. See [cleanup-audit.md](cleanup-audit.md) for the removal decisions and retained behavior.
+
+The full release run passed **28 checks**, including **79 numerical/tooling tests** and the **412-template** translation audit. Missing current-schema fields and non-boolean contour visibility are rejected without mutation or default filling. Source, guard and lifecycle checks pass; all four `bugs.blend` faces export successfully.
+
+All **24 frozen preview samples** match exactly. Native-dialog, mirrored-sweep, output-control and English/Chinese workflows pass at **2560 × 1600** and **3840 × 2043** (requested height 2160). Curve editing, navigation, sliders, 360° playback, draft reopening and save/resume remain working. PNG8/16 and FLOAT EXR32 precision, 2048-pixel fixture export with independent Blender reload, and 4096-pixel filtering/codecs pass. The extension manifest and actual ZIP import under a Blender extension namespace pass without legacy install metadata.
+
+Both model files and the authored README draft match their pre-audit hashes. The retired toon demo copies match the originals byte for byte. Release verification requires the new UV, native-dialog and mirror suites and checks archive members against the current source.
+
+Evidence: [full run](build/validation/0.17.0/run-all.json), [audit and preservation](build/validation/0.17.0/audit-results.json), [release verification](build/validation/0.17.0/release.json).
+
+## Mirrored sweep lock — November 13, 2026
+
+Validated in disposable **Blender 5.3.0** processes on Windows. Evidence is under `build/validation/mirror-lock`; schema 4 is unchanged.
+
+- **78 numerical/tooling tests** pass. Mirroring always copies Left → Right into Right → Left, including curves, handles, order, progress positions and frame counts. Locked mutations are atomic; refitting, endpoint protections and the 33-frame limit pass.
+- Real popup workflows pass at **2560 × 1600** (scale 1.0) and **3840 × 2043** (scale 1.5, requested height 2160). Right-row clicks remain disabled. Direct selection/edit operators are rejected without changing artwork or selection. English/Chinese lock tooltips render in both sizes.
+- Left insertion, deletion, copying and handle edits immediately update right-row data and buttons. Enabling from an independently edited right row with unequal frame counts preserves the left sweep, selects the nearest left frame (earlier on a tie), and selects its main boundary’s first point. Unlocking, undo/redo and stale-dialog rejection pass.
+- Automatic drafts, explicit project reopening and actual Blender save/resume retain mirrored artwork and the lock. Both preview halves, right-row playback highlighting and 512-pixel exports pass. Existing curve editing, native navigation, sliders and full 360° orbit workflows also pass.
+- The edit-guard suite, **410-template** translation audit and English/Chinese runtime/UI suites pass, including 2K/4K language switching, save/resume and reopening.
+- Both `bugs.blend` and `test_sdf.blend` retain the SHA256 values recorded below. Existing working-tree changes and authored files are preserved.
+
+Evidence: [run summary](build/validation/mirror-lock/summary.json), [numerical](build/validation/mirror-lock/run-core.json), [2K/4K mirror and curve workflows](build/validation/mirror-lock/run-mirror.json), [guards](build/validation/mirror-lock/run-guards.json), [localization](build/validation/mirror-lock/run-i18n.json).
+
+## UV maps and native dialogs — November 13, 2026
+
+Validated in disposable **Blender 5.3.0** processes on Windows. Evidence is under `build/validation/uv-dialog-update`. No source `.blend` was saved or modified.
+
+- **77 numerical/tooling tests** pass, including overlap acceptance, last-valid-sample overwrite at shared texels, occluded-sample preservation, and retained invalid-input checks.
+- Two distinct bake layouts produce different 512-pixel placements and saved UV metadata. Switching preserves artwork, fit, selection, history, playback, preview caches and the source/reference active and render UV defaults (also tested with different active and render maps).
+- Invalid/missing maps, changed geometry/pose/triangle identities/region, stale stages/sessions, cancellation and busy submissions are rejected without partial UV changes. Draft and project reopening retain the chosen map.
+- Native-dialog workflows pass at **2560 × 1600** and **3840 × 2160** requested window sizes, with UI preferences 1.0 and 1.5: long/rapid presses, release outside, Escape/right-click/focus loss, nested UV search and resolution dropdown, numeric/text acceptance, file-browser cancellation, overwrite cancellation and real export. Curve dragging, undo, sliders and viewport navigation work afterward.
+- Blender's `event_simulate` accepts press/release events but does not generate `DOUBLE_CLICK`. That one event tag is supplied at the curve-input boundary; its opening press and subsequent release still pass through the popup input path. Dialog tests do not substitute direct operator execution for clicks.
+- All **24 frozen preview samples** still match. Source, edit-guard, lifecycle, curve, full-sweep and preview-interaction suites pass. Bake-map save/resume passes at 2K and 4K. The **409-template** translation audit and English/Chinese runtime/UI checks pass at both sizes.
+
+All four `bugs.blend` faces export at **512 × 512** with their active maps and frontal filtering:
+
+| Face | Bake UV | Covered texels |
+|---|---|---:|
+| hana_face | UVMap | 136,438 |
+| amiya_face | UVMap | 20,395 |
+| genshin_face | UVMap | 92,210 |
+| avywen_face | UV0 | 120,635 |
+
+Evidence: [UV selection](build/validation/uv-dialog-update/uv-selection/uv-selection.json), [four-face exports](build/validation/uv-dialog-update/bugs-export/bugs-export.json), [2K dialogs](build/validation/uv-dialog-update/native-dialogs-2k/native-dialogs.json), [4K dialogs](build/validation/uv-dialog-update/native-dialogs-4k/native-dialogs.json).
+
+Preserved SHA256 values:
+
+```text
+bugs.blend      7c9bf4500068957ab74eb46a5263bc1cfea62d3e776b2e7d91040b6ccbce876b
+test_sdf.blend  f9670911e59ddf0de95a690c8c677348b267904bd295430d0b73f2a586e7da75
+```
+
+## Previous release baseline
 
 Validated with vanilla **Blender 5.2.2 LTS on Windows**, September 15, 2026. All Blender checks use disposable processes. Evidence is under `build/validation/0.16.0`; the original `test_sdf.blend` is unchanged.
 
@@ -81,7 +173,7 @@ Build evidence is excluded from the source ZIP.
 
 ## Reproduce
 
-Use Python with NumPy. The runner derives the release from the manifest and accepts `core`, `guards`, `lifecycle`, `ui`, `i18n`, `export`, `package` and `all`.
+Use Python with NumPy. The runner derives the release from the manifest and accepts `core`, `guards`, `lifecycle`, `uv`, `mirror`, `dialogs`, `ui`, `i18n`, `export`, `package` and `all`.
 
 ```powershell
 python tools/check_i18n.py

@@ -83,6 +83,16 @@ def operation(s, value):
         s.curve["operation"] = value
 
 
+def rename_shape(s, name):
+    with s.edit(stages=("EDIT",)):
+        if not s.curve["closed"]:
+            raise UserError("Select a closed curve first.")
+        name = name.strip()
+        if not name or len(name) > 80 or not name.isprintable():
+            raise UserError("Use a shape name with 1–80 printable characters.")
+        s.curve["name"] = name
+
+
 def transform(s, dx=0, dy=0, angle=0, scale=1):
     with s.edit(stages=("EDIT",)):
         editing.transform_contour(
@@ -111,7 +121,10 @@ def flat(s):
 def action(s, code):
     s.require_edit()
     if code == "NEXT":
-        code = {"ORIENT": "SET_FRONT", "FIT": "FIT", "EDIT": "CONFIRM"}.get(s.stage, "")
+        if s.stage == "FIT":
+            s.continue_fitting()
+            return
+        code = {"ORIENT": "SET_FRONT", "EDIT": "CONFIRM"}.get(s.stage, "")
     if code == "SET_FRONT":
         s.set_front()
         return
@@ -147,7 +160,10 @@ def action(s, code):
                 s.project["authoring"]["stage"] = "EDIT"
                 s.activate_stage()
             else:
-                s.project["authoring"]["stage"] = "FIT" if s.stage == "EDIT" else "ORIENT"
+                s.project["authoring"]["stage"] = (
+                    "REFIT" if s.stage == "EDIT"
+                    else "REORIENT" if s.revisiting_setup else "ORIENT"
+                )
                 if s.stage == "FIT":
                     s.seed_landmarks()
                 s.playing = s.orbit_preview = False
@@ -162,13 +178,15 @@ def action(s, code):
                 model.MIN_KEYFRAMES, min(model.MAX_KEYFRAMES, count)
             )
         return
+    if code == "MIRROR":
+        s.cancel_curve_edit()
     with s.edit(stages=("FIT", "EDIT") if code == "MIRROR" else ("EDIT",)):
         if code == "TRIANGLE":
             curve = model.triangle()
             names = {c["name"] for c in s.keyframe["contours"]}
             number = 2
             while curve["name"] in names:
-                curve["name"] = f"Triangle {number}"
+                curve["name"] = f"Shape {number}"
                 number += 1
             s.keyframe["contours"].append(curve)
             s.contour = len(s.keyframe["contours"]) - 1
@@ -214,6 +232,9 @@ def action(s, code):
             model.copy_previous(s.project, s.direction, s.key_index)
         elif code == "MIRROR":
             s.project["mirror_sweeps"] = not s.project["mirror_sweeps"]
+            # Keep the selected right frame's progress before replacing its
+            # sweep, then choose the closest editable left frame.
+            s.normalize_selection()
         else:
             raise UserError("Unknown authoring action.")
         if code in ("TRIANGLE", "DUPLICATE", "UP", "DOWN"):

@@ -8,6 +8,7 @@ import importlib.util
 import json
 import types
 import time
+import tomllib
 import zipfile
 import bpy
 from math import pi
@@ -79,8 +80,9 @@ assert (
     session.ACTIVE.project["settings"]["bit_depth"] == 16
     and session.ACTIVE.project["settings"]["smoothing"] == 0
 )
-assert module.bl_info["name"] == "Anime SDF Gen" and module.bl_info["author"] == "xht8723"
-assert module.bl_info["version"] == tuple(map(int, version().split(".")))
+manifest = tomllib.loads((DEST / "blender_manifest.toml").read_text(encoding="utf-8"))
+assert manifest["name"] == "Anime SDF Gen" and manifest["maintainer"] == "xht8723"
+assert manifest["version"] == version()
 assert p.bl_rna.properties["keyframes"].name == "Shadow keyframes"
 session.ACTIVE.set_front(Quaternion((1, 0, 0), pi / 2))
 assert session.ACTIVE.stage == "FIT" and len(session.ACTIVE.project["authoring"]["anchors"]) == 3
@@ -89,7 +91,7 @@ assert session.ACTIVE.stage == "EDIT" and session.ACTIVE.key_index == 0
 assert len({p["co"][0] for p in session.ACTIVE.curve["points"]}) == 1
 bpy.ops.anime_sdf_gen.keyframe(direction=model.LTR, index=6)
 bpy.ops.anime_sdf_gen.action(action="TRIANGLE")
-assert session.ACTIVE.curve["name"] == "Triangle"
+assert session.ACTIVE.curve["name"] == "Shape"
 assert session.ACTIVE.selected == {(1, 0), (1, 1), (1, 2)}
 assert all(p["mode"] == "AUTO" for p in session.ACTIVE.curve["points"])
 importlib.import_module(name + ".commands").operation(session.ACTIVE, "REMOVE")

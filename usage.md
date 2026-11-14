@@ -1,10 +1,10 @@
 # Anime SDF Gen — usage
 
-Version **0.16.0**, maintained by [xht8723](https://github.com/xht8723). Blender **5.2 LTS** on Windows.
+Version **0.20.0**, maintained by [xht8723](https://github.com/xht8723). Blender **5.2 LTS** on Windows.
 
 ## Install and create
 
-In **Edit → Preferences → Get Extensions**, open the menu and choose **Install from Disk**. Select `anime_sdf_gen-0.16.0.zip` and enable **Anime SDF Gen**. In the original 3D View, press **N** and open **Anime SDF Gen**.
+In **Edit → Preferences → Get Extensions**, open the menu and choose **Install from Disk**. Select `anime_sdf_gen-0.20.0.zip` and enable **Anime SDF Gen**. In the original 3D View, press **N** and open **Anime SDF Gen**.
 
 Close any authoring session before replacing the installed extension. Restart Blender after installing the new build so its Python modules load fresh.
 
@@ -45,10 +45,12 @@ Both setup steps allow orbiting. During curve editing the authoring view is fixe
 
 ## Orient and fit
 
-1. **Orient the face to front view.** Orbit until the face looks straight at you and the head is upright. **Source / UV…** selects the output UV map and **Frontal surface only**. Leave frontal filtering enabled for the fixture, whose rear-head UVs overlap. Click **Next Step**.
+1. **Orient the face to front view.** Orbit until the face looks straight at you and the head is upright. **Source / UV…** contains **Bake UV map** and **Frontal surface only**. The bake map defaults to the active map captured when creating the session. Click **Next Step**.
 2. **Place markers.** Nose, Mouth Center and Chin already appear at approximate default positions on the face. Drag each handle onto the matching feature. You can orbit to inspect it. Nose must be above mouth, and mouth above chin. Choose a preset, **Keyframes per sweep** and **Mirror Full Sweep**, then click **Next Step**.
 3. **Adjust curves.** The curve editor and live shadow view appear together, starting on keyframe 1 of Left → Right. Select keyframes and adjust their curve points, then click **Next Step**.
-4. **Confirm.** A single large preview automatically rotates the light through **Front → character left → Back → character right → Front** and repeats. Choose the save location, file name, texture resolution and output packing, then click **Generate & Finish**.
+4. **Confirm.** A single large preview automatically rotates the light through **Front → character left → Back → character right → Front** and repeats. Choose the save location, file name, bake UV map, texture resolution and output packing, then click **Generate & Finish**.
+
+Returning from editing to markers shows **Return to editing**, which keeps all current curves, frame positions and counts. Changes to markers, the starting preset or the fitting count apply only through **Refit boundaries…**. That separate action asks before replacing every main boundary; extra shapes are copied from nearby existing frames, so reducing the frame count can omit shapes. Refitting is undoable. The safe return route survives drafts, reopening, Blender save/resume, and revisiting orientation.
 
 The default marker positions fit the face bounds and snap to the frontal surface. If a default falls over an opening, it moves to nearby supported geometry. These are starting positions, not detected anatomy. Empty-space clicks leave markers unchanged. The keyframe count has small minus/plus buttons around a wide, centered numeric selector. Click the number for direct entry; any count from **2 to 33** works, including even counts. Both endpoints are included in that count.
 
@@ -65,8 +67,10 @@ The two rows are labelled by boundary movement in the fitted front view:
 
 Each row contains keyframes **1 … N**. Default first keyframes leave the face fully lit; default last keyframes leave it fully shadowed. There is no shared middle keyframe. The controls show the selected row's count.
 
+For a first edit, choose a middle keyframe and drag a visible point. The first frame deliberately has its boundary outside the face. The editor includes default shortcut reminders and labels the blue previous-frame and purple next-frame guides. Keyframe tooltips show the exact light angle and sweep progress, including uneven spacing after insertion. The filled button identifies the frame being edited; an underline follows preview playback independently. The preview header identifies both states, and the locked row always displays **Mirrored from Left → Right**.
+
 - Click a keyframe, then select points over the reference. Selected points are orange; the larger point is active. **Shift-click** adds or removes a point. Drag a selected point to move the group, or drag a handle to adjust only that handle. The projected mask updates immediately during the drag.
-- Press **B**, then drag a box around points. **Shift** with the box gesture, or the middle mouse button, subtracts points. Dragging empty space also selects a box; Shift adds and Ctrl subtracts in this case. **A** selects all enabled curves' points, **Alt+A** deselects and **Ctrl+I** inverts selection. Clicking a layer selects its whole curve; adding a triangle selects all three points.
+- Press **B**, then drag a box around points. **Shift** with the box gesture, or the middle mouse button, subtracts points. Dragging empty space also selects a box; Shift adds and Ctrl subtracts in this case. **A** selects all enabled curves' points, **Alt+A** deselects and **Ctrl+I** inverts selection. Clicking a layer selects its whole curve; adding a shape selects all three points.
 - Use **G / R / S** to move, rotate or scale selected points. **X / Y** constrains the face-plane axes; press the same axis again to clear it. Type a displacement, degrees or scale factor. For example, **G X .05 Enter** moves the selection by 5% of face width; **R 15 Enter** rotates it by 15 degrees around the selected points' center. Movement coordinates use normalized face width/height. Rotation and uniform scale preserve physical proportions despite differing face width and height. Z movement is locked to preserve the projection.
 - Hold **Shift** for fine mouse movement and **Ctrl** for incremental snapping: movement .01 face units, rotation 5 degrees, scale .1. Combining Shift and Ctrl uses .001 units, 1 degree and .01. Explicit numeric input takes precedence over snapping. Click, Enter or Space confirms a keyboard transform; **Esc** or right-click restores the artwork, mirrored sweep and history from before it. Mouse dragging confirms on release and also supports Esc cancellation.
 - These selection, transform and modal shortcuts are read from Blender's active Curve, 3D View and modal keymaps, including remapped keys. The examples use Blender's standard keymap. The transforms operate on session data in the fixed face plane; they do not move the source mesh. Changes to the preferred selection mouse button also apply.
@@ -74,13 +78,17 @@ Each row contains keyframes **1 … N**. Default first keyframes leave the face 
 - **Insert** splits the following segment; **Remove** deletes a point. The main boundary endpoints are retained above/below the working face. Zoom out or pan to reach them.
 - The two curved-arrow icons at the top undo and redo; **Ctrl+Z** and **Ctrl+Shift+Z** also use session-local history.
 - **Copy previous keyframe** copies the preceding keyframe within the selected row. **Add keyframe** inserts a copy halfway toward the next one (or before the last endpoint when selected). **Remove** preserves the first and last keyframes. Wheel over crowded rows to scroll.
-- **Mirror Full Sweep** links corresponding frames across the two rows in head space, including on asymmetric UV layouts. Editing either row updates its opposite; keyframe 3 mirrors to keyframe 3 in the other row. It never mirrors into another position in the same row. Unlinked rows can have different artwork, counts and intermediate positions. Re-enabling the link replaces the opposite row with a reflection of the current row and can be undone.
+- **Mirror Full Sweep** makes **Left → Right** the editable source. **Right → Left** stays visible but disabled and mirrors every left frame in head space, including on asymmetric UV layouts. Adding, deleting, copying or editing left frames updates the right row immediately, preserving frame order and progress positions. Enabling the option always replaces Right → Left with a reflection of Left → Right; if the right row was selected, selection moves to the nearest left frame (earlier frame on a tie), selecting its main boundary’s first point. The toggle can be undone. Turning it off unlocks the right row with its current mirrored artwork; both rows can then have independent artwork, counts and intermediate positions. Full 360° playback continues to use both sweeps.
 
-**Add triangle** creates one enabled, closed curve with three **Smooth** points near the middle of the lower face. Select **Lit area** to carve a bright patch inside the main shadow, or **Shadow area** to darken the region. The preview updates automatically and editing pauses playback. Move and reshape it for any feature, including the nose or chin. Change points to **Corner** for sharp vertices or **Free** for individual Bézier handles. Areas apply in the displayed layer order. Closed curves support duplicate, delete, hide, reorder, point edits, and **Move / Rotate / Scale…**.
+**Shapes and their point controls share the full-height sidebar.** Click a flat list row to select the whole shape. Its effect, rename, transform, duplicate, delete, visibility and order controls appear below the list, followed by its point coordinates, handle modes and point insertion/removal. Scroll within a long shape list or drag its scrollbar; scroll elsewhere in the sidebar to reach overflowing properties. Canvas selection and frame changes reveal the active shape automatically. The main boundary is always retained. Keyframe actions, Mirror Full Sweep and playback stay together below the views.
 
-A **Lit area** also carries into earlier keyframes in its own sweep. For example, a triangle on Left → Right keyframe 7 keeps its region lit on keyframes 1–6 wherever those frames would shadow it. It does not alter the opposite row unless **Mirror Full Sweep** is enabled; linking reflects the artwork and its carry into that other row. The handles remain on keyframe 7. Moving, reshaping, hiding or deleting the original updates all inherited light, and Undo/Redo covers the change. No duplicate curves are inserted into earlier keyframes.
+**Add shape** creates one enabled, closed curve with three **Smooth** points near the middle of the lower face. Select **Lit cutout** to carve a bright patch inside the main shadow, or **Shadow patch** to darken the region. Use **Rename shape…** for names such as “Cheek highlight”; names are saved and mirrored with the artwork. The shape list labels its effect or hidden state. The preview updates automatically and editing pauses playback. Move and reshape it for any feature, including the nose or chin. Change points to **Corner** for sharp vertices or **Free** for individual Bézier handles. Areas apply in the displayed layer order. Closed curves support duplicate, delete, hide, reorder, point edits, and **Move / Rotate / Scale…**.
 
-Later Lit cutouts take precedence over earlier shadow artwork. Multiple cutouts contribute their combined lit footprints to earlier keyframes. Within a cutout's own keyframe, a Shadow layer placed after it can refill part of it; only the surviving light carries backward. This behavior keeps one lit-to-shadow transition per pixel and one threshold map per light direction.
+When several points are selected, the panel shows their count and the active point. **Smooth / Corner / Free** affect every selected point; **X / Y…**, **Insert** and **Remove** affect only the active point. Mixed handle modes leave all three mode buttons unselected.
+
+A **Lit cutout** also carries into earlier keyframes in its own sweep. For example, a triangle on Left → Right keyframe 7 keeps its region lit on keyframes 1–6 wherever those frames would shadow it. It does not alter the opposite row unless **Mirror Full Sweep** is enabled; linking reflects the artwork and its carry into that other row. The handles remain on keyframe 7. Moving, reshaping, hiding or deleting the original updates all inherited light, and Undo/Redo covers the change. No duplicate curves are inserted into earlier keyframes.
+
+Later lit cutouts take precedence over earlier shadow artwork. Multiple cutouts contribute their combined lit footprints to earlier keyframes. Within a cutout's own keyframe, a Shadow layer placed after it can refill part of it; only the surviving light carries backward. This behavior keeps one lit-to-shadow transition per pixel and one threshold map per light direction.
 
 The back arrow in **Confirm** returns to keyframe 1 of Left → Right, preserving all curves and output settings. Returning to Confirm restarts the orbit at Front. From curve editing, the back arrow returns to markers in a single view, preserving their positions. **Next Step** from markers regenerates main curves and both rows with the chosen count, retaining closed patches from the nearest previous keyframes. Refit is undoable. Going back again to orientation and confirming a new front resets the three markers to defaults in the new head frame.
 
@@ -96,13 +104,17 @@ The shadow preview uses warm lit regions, cool shadow regions, and smooth surfac
 
 The current keyframe's projected **512-pixel mask**, including carried lit cutouts, updates immediately while dragging. After editing pauses, cached distance fields calculate the interpolated sweep. Playback decodes those thresholds into the displayed mask; it does not rebuild distance fields every frame. A new edit or cancellation discards unfinished interpolation work. There is one preview implementation, with no live UV-texture/toon mode retained.
 
-Each direction encodes one lit-to-shadow transition per pixel. Lit cutouts carry backward automatically to satisfy this rule. Remaining reversals caused by main boundaries or Shadow areas appear magenta, with the offending keyframes in the warning footer; generation is blocked until corrected. Self-intersections and incompatible UV overlaps also block export. Generation computes and validates at the chosen output resolution.
+Each direction encodes one lit-to-shadow transition per pixel. Lit cutouts carry backward automatically to satisfy this rule. Remaining reversals caused by main boundaries or Shadow patches appear magenta, with the offending keyframes in the warning footer; generation is blocked until corrected. Self-intersections also block export. Generation computes and validates at the chosen output resolution.
 
 The two first masks meet at Front; the two last masks meet at Back. If their artwork differs, switching maps can cause a visible jump. An **orbit seam** warning identifies the endpoint and pixel count. You can align the endpoint artwork for seamless rotation, or keep it and export. This warning does not silently merge the rows. Default preset endpoints match.
 
 ## Export, close, and recover
 
 In **Confirm**, click the **Save location** field to choose a folder and file name in Blender's file browser. The **File name** and **Texture resolution** fields can also be edited separately.
+
+**Bake UV map**, above Texture resolution, opens a searchable list of the source mesh's UV maps. You can also choose it through **Source / UV…** in Orientation. Changing it in Confirm keeps the current fit, artwork, landmarks, history and projected preview. It does not change the source's active/render UV maps or the **Materials** reference shading. The choice is retained through stage changes, drafts, saving, reopening and export. If source geometry, pose or region membership has changed, relink the source before switching maps.
+
+Overlapping and mirrored UVs are allowed without overlap checks. At shared texels, later valid triangle samples overwrite earlier values. Different face locations may therefore receive the same baked shadow even when their projected preview differs. Inspect the export and adjust the chosen UV map if needed. Maps must still have finite coordinates, nonzero triangle areas and fit inside a single 0–1 tile.
 
 **Output precision** applies to every generated texture: **8-bit PNG**, **16-bit PNG** (default), or **32-bit Float EXR**. Depth is per channel. The live preview uses floating-point thresholds; bit-depth quantization is applied during export. 8-bit saves space but can produce coarser sweep transitions; 32-bit stores the calculated floating-point precision in larger, uncompressed EXR files. The destination extension and file list follow this choice.
 
@@ -122,6 +134,8 @@ Projects use schema 4. Projects from older releases are rejected without modifyi
 
 **Generate & Finish** stages and verifies all listed files, commits the set, then closes the popup. Existing files in the chosen output set receive an overwrite confirmation. Export errors appear in the warning footer and retain Confirm; **Cancel Generation** stops work and keeps the session. Use the back arrow to adjust curves again.
 
+After success, the original **Anime SDF Gen** launcher retains an **Export complete** card with the saved folder, file count, **Open output folder**, **Reopen project**, and a **Shader setup guide** link. It reminds you to load the textures as **Non-Color**. The card describes the last successful export in this Blender session; a cancelled or failed export does not replace it. Reopening uses the saved editable project directly.
+
 All owned preview meshes, materials, images, scenes, internal UI data, handlers, timers, and GPU resources are released. No global orphan purge runs and no shader is assigned. If the original window was closed during authoring, the remaining window returns to the source workspace instead of quitting Blender.
 
 - **Save Draft & Close** preserves an editable project without generating a texture.
@@ -130,10 +144,10 @@ All owned preview meshes, materials, images, scenes, internal UI data, handlers,
 
 Automatic drafts live outside the `.blend`, under `anime_sdf_gen/v4/drafts/` in Blender's user configuration directory. Saving a `.blend` cancels any unconfirmed curve transform, removes the popup and preview before serialization, then rebuilds them after success or failure. The current step, confirmed artwork, point selection, output packing, local history, cameras and rotation/playback state are retained; interrupted generation can be started again. Loading another file or disabling the add-on preserves a recovery draft. **Recover Latest Draft** opens the newest current-schema draft. Reopening a Confirm project starts its orbit at Front; reopening curve editing selects keyframe 1 of Left → Right.
 
-Only the documented current schema is accepted. No project migrations or compatibility loaders are included. Existing authored files are preserved.
+Only complete records using the documented current schema are accepted. Missing required fields are reported; no project migrations, default-filling upgrades or compatibility loaders are included. Existing authored files are preserved.
 
 ## Supported models
 
-Use compatible UVs in one 0–1 tile and topology-preserving evaluation. Current armature and shape-key deformation is captured. Prepare a source copy when topology-changing modifiers are required. Symmetric art cannot resolve overlapping UVs.
+Use UVs in one 0–1 tile and topology-preserving evaluation. Current armature and shape-key deformation is captured. Prepare a source copy when topology-changing modifiers are required. Shared UV texels store only one value per output channel.
 
 One frontal projection cannot independently author the rear head, hidden cavities, or underside shadows. The Face coverage map marks supported regions; restrict the eventual shader to the intended face geometry when other surfaces share those UVs. See the [format guide](output-format.md) for decoding and [validation](validation.md) for measured performance.

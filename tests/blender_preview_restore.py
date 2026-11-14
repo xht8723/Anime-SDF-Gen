@@ -152,7 +152,7 @@ def workflow():
     assert s.conflict is not None and s.preview.rgba[..., 1].any()
     current_preview()
     redraw()
-    assert e.warning_bounds.y == 0
+    assert e.warning_bounds.y == e.boxes["PANEL"].y
     s.restore_project(saved)
     yield from wait_for(lambda: s.preview.thresholds is not None or bool(s.error), 60)
     assert not s.error and not s.preview.rgba[..., 1].any(), s.error

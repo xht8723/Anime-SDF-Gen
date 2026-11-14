@@ -1,6 +1,6 @@
 # Anime SDF Gen — texture and project format
 
-Version 0.16.0 writes configurable PNG8/PNG16/EXR32 textures and project schema 4. Each threshold map represents a complete boundary sweep. Curve selection and pending transforms are transient editor state and are not serialized into the project. The preview projects a lit/unlit mask; its colors and smooth shading are not written into the texture data.
+Version 0.20.0 writes configurable PNG8/PNG16/EXR32 textures and project schema 4. Each threshold map represents a complete boundary sweep. Curve selection and pending transforms are transient editor state and are not serialized into the project. The preview projects a lit/unlit mask; its colors and smooth shading are not written into the texture data.
 
 ## Image
 
@@ -29,6 +29,8 @@ In Confirm, each logical map can use **R**, **G**, **B**, or **Separate**. An RG
 For example, Left → B, Right → Separate, Coverage → R writes a packed file with R = coverage, G = 0, B = left threshold, plus a right-threshold grayscale file and the JSON project.
 
 Both directional maps are baked to the selected existing UV map. Do not flip U for the right map: mirroring has already been incorporated into the authored result.
+
+Select **Bake UV map** in Orientation's **Source / UV…** dialog or directly in Confirm. The choice uses the existing `source.uv_map` and `authoring.uv_map` fields in schema 4. It does not change the source mesh's active/render UV defaults or material texture inputs. Overlaps are permitted: later valid triangle samples overwrite earlier values at shared texels. Invalid or occluded samples do not erase earlier valid samples. The projected preview remains independent of UV placement.
 
 Internally, face coordinates use `u=0` at viewer left, `u=1` at viewer right, and `v=0` at the bottom. The right vector of the projection is `up × forward`, which points toward the character's left. The sidecar stores the complete orthonormal frame, center, width, and height.
 
@@ -96,7 +98,7 @@ For a directional keyframe `i`, let `M_i` be its local shadow mask and `L_j` the
 S_i = M_i AND NOT (UNION of L_j for every j > i)
 ```
 
-The two first keyframes are independent; neither receives cutouts from the opposite row. **Mirror Full Sweep** reflects every corresponding keyframe into the other row in head space, including its closed shapes. It never copies between different positions in the same row. Later cutouts take precedence over earlier shadow artwork. Curve data stays on the originating keyframe: propagation is derived, so editing or removing a curve cannot leave duplicate shapes behind. Immediate preview, the full orbit and export all use these effective masks.
+The two first keyframes are independent; neither receives cutouts from the opposite row. **Mirror Full Sweep** reflects every Left → Right keyframe into Right → Left in head space, including its closed shapes. It never copies between different positions in the same row. Later cutouts take precedence over earlier shadow artwork. Curve data stays on the originating keyframe: propagation is derived, so editing or removing a curve cannot leave duplicate shapes behind. Immediate preview, the full orbit and export all use these effective masks.
 
 Signed Euclidean distances are positive inside shadow. Empty/full canvases use finite signed diagonal distances. Consecutive effective masks must be nested over the projected face domain; remaining reversals from main boundaries or ADD shapes are rejected. For a pixel changing from negative distance `d0` to positive distance `d1`, between positions `p0` and `p1`:
 
@@ -124,10 +126,10 @@ The authoring preview rasterizes its current projected mask at 512 pixels. Cache
 - `source`: blend/object/mesh names, captured polygon IDs, region (`SELECTED` or `VERTEX_GROUP`), optional vertex-group name, frontal-subset setting, UV name, and a SHA256 of evaluated coordinates, triangles, and UVs.
 - `alignment`: orthonormal head frame, center, width, and height.
 - `landmarks`: normalized nose, mouth, and chin positions.
-- `authoring`: `stage` (`ORIENT`, `FIT`, `EDIT`, or `CONFIRM`), `reference` (`NEUTRAL` or `MATERIAL`), initial/refit `keyframe_count` per sweep, pending orientation choices `uv_map` and `front_only`, and named surface `anchors`. Each anchor stores a world position, original triangle vertex indices, and three barycentric weights. No Blender pointer is serialized. Generated sidecars reopen in Confirm; use Back to edit their curves.
+- `authoring`: `stage` (`ORIENT`, `FIT`, `EDIT`, `CONFIRM`, `REORIENT`, or `REFIT`), `reference` (`NEUTRAL` or `MATERIAL`), initial/refit `keyframe_count` per sweep, pending orientation choices `uv_map` and `front_only`, and named surface `anchors`. `REORIENT` and `REFIT` display the same first two steps while retaining an explicit return-to-existing-curves route. They do not rebuild boundaries unless the artist chooses Refit. Each anchor stores a world position, original triangle vertex indices, and three barycentric weights. No Blender pointer is serialized. Generated sidecars reopen in Confirm; use Back to edit their curves.
 - `sweeps`: `left_to_right` and `right_to_left` arrays of complete keyframes, each with strictly increasing `progress` from 0 to 1. Independent rows can have different counts and intermediate positions.
-- `mirror_sweeps`: links corresponding artwork and keyframe positions across the two rows. Re-enabling it reflects the current row into the opposite row. There is no shared frontal keyframe or pair-count setting.
-- `contours`: main boundary followed by ordered closed shapes, with enabled state and ADD/REMOVE operation (Shadow area / Lit area in the UI). Only locally authored curves are stored; carried light is derived with the rule above.
+- `mirror_sweeps`: derives Right → Left from the editable Left → Right sweep, including artwork, frame counts and progress positions. Re-enabling it always replaces the right row with the left row’s reflection. There is no shared frontal keyframe or pair-count setting.
+- `contours`: main boundary followed by ordered closed shapes, with enabled state and ADD/REMOVE operation (Shadow patch / Lit cutout in the UI). Only locally authored curves are stored; carried light is derived with the rule above.
 - `points`: normalized positions, AUTO/CORNER/FREE mode, and relative incoming/outgoing handle vectors.
 - `settings`: preview/output resolution, padding, output stem, integer `bit_depth` (8/16/32), `smoothing` (0…8), and `packing`, a map from the three logical map names to `R`, `G`, `B`, or `SEPARATE`. Rotation and playback are transient UI state and have no effect on map meanings.
 - `encoding`: normalized threshold meanings, Non-Color, unused-channel fill and endpoint conventions; independent of the chosen channels.
@@ -141,6 +143,6 @@ Authoring data is authoritative: the texture can be regenerated even if its PNG 
 
 Only the exact format identifier and version above are accepted. Other schemas are rejected with a request to create a new project. There is no conversion path. Opening or rejecting a file never modifies it.
 
-Explicit relinking captures the current active selection or vertex group and returns to `ORIENT`. Ordinary reopening and generation reject source fingerprint or group-membership changes. Changes to the user's live face selection alone do not alter the captured polygon set.
+Explicit relinking captures the current active selection or vertex group and returns to `REORIENT`, retaining the existing artwork for review or explicit refitting. Ordinary reopening and generation reject source fingerprint or group-membership changes. Changes to the user's live face selection alone do not alter the captured polygon set.
 
 Window IDs, internal workspace/screen IDs, GPU resources, and live Blender objects are session-only. During an ordinary `.blend` save, the popup's divider, focus, cameras, rotation, selection and history are held in memory while its window and data are removed, then rebuilt afterward. Recovery and explicit drafts use the same external JSON format. Current automatic recovery uses the separate `anime_sdf_gen/v4/drafts/` directory.

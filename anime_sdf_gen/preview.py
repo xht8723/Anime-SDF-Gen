@@ -25,7 +25,6 @@ class Preview:
         self._mask_texture = self._face_shader = self._face_batch = None
         self._mask_texture_revision = -1
         self.last_render_ms = 0.0
-        self.render_times = []
 
     def cancel_filter(self):
         if self.filter_job:
@@ -133,8 +132,6 @@ class Preview:
         except ValueError as exc:
             self.session.error = diagnostic(exc)
         self.last_render_ms = (time.perf_counter() - start) * 1000
-        self.render_times.append(self.last_render_ms)
-        self.render_times = self.render_times[-120:]
 
     def advance(self, now):
         if self.raw_thresholds is None and self.job is None and now >= self.debounce:
@@ -170,7 +167,7 @@ class Preview:
                     if self.session.orbit_preview:
                         self.render()
                     break
-                except (ValueError, KeyframeConflict) as exc:
+                except ValueError as exc:
                     self.session.error = diagnostic(exc)
                     self.session.conflict = exc.mask if isinstance(exc, KeyframeConflict) else None
                     self.job = None
@@ -199,4 +196,3 @@ class Preview:
         self.depth = self.domain = self.rgba = None
         self.field_cache.clear()
         self.mask_cache.clear()
-        self.render_times.clear()

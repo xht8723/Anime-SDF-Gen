@@ -9,6 +9,8 @@ from .theme import TEXT, MUTED, BORDER, ACCENT
 from .typography import wrap
 from .i18n import iface
 from .core.messages import mark, msg, raw, contour_label
+from .shape_list import draw_shape_list
+from .viewport import Rect
 
 
 class Sidebar:
@@ -27,7 +29,13 @@ class Sidebar:
         self.text(value, self.x, self.y, 12, MUTED, self.width)
         self.y -= 19 * self.unit
 
-    def row(self, items):
+    def note(self, value):
+        for line in wrap(iface(value), self.width, 11):
+            self.text(raw(line), self.x, self.y, 11, MUTED)
+            self.y -= 16 * self.unit
+        self.y -= 8 * self.unit
+
+    def row(self, items, height=32, gap=7, size=13):
         width = (self.width - 6 * self.unit * (len(items) - 1)) / len(items)
         for i, item in enumerate(items):
             key, value, *options = item
@@ -38,14 +46,15 @@ class Sidebar:
                 value,
                 (
                     self.x + i * (width + 6 * self.unit),
-                    self.y - 31 * self.unit,
+                    self.y - (height - 1) * self.unit,
                     width,
-                    32 * self.unit,
+                    height * self.unit,
                 ),
                 selected,
                 enabled and not self.s.busy,
+                size=size,
             )
-        self.y -= 39 * self.unit
+        self.y -= (height + gap) * self.unit
 
     def confirm(self):
         s = self.s
@@ -64,6 +73,9 @@ class Sidebar:
         self.y -= 10 * u
         heading(mark("File name"))
         row([("FILENAME", raw(destination.name))])
+        self.y -= 10 * u
+        heading(mark("Bake UV map"))
+        row([("BAKE_UV", raw(s.project["source"]["uv_map"]))])
         self.y -= 10 * u
         heading(mark("Texture resolution"))
         resolution = s.project["settings"]["resolution"]
@@ -130,15 +142,11 @@ class Sidebar:
 
     def setup(self):
         s = self.s
-        text = self.text
         button = self.button
-        p = self.painter
-        e = self.editor
         x = self.x
         cw = self.width
         u = self.unit
         heading = self.heading
-        row = self.row
         heading(mark("Keyframes per sweep"))
         count = s.project["authoring"]["keyframe_count"]
         square = 32 * u
@@ -169,12 +177,6 @@ class Sidebar:
 
     def fitting(self):
         s = self.s
-        text = self.text
-        button = self.button
-        p = self.painter
-        e = self.editor
-        x = self.x
-        cw = self.width
         u = self.unit
         heading = self.heading
         row = self.row
@@ -195,16 +197,13 @@ class Sidebar:
         )
         row([("MIRROR", mark("Mirror Full Sweep"), s.project["mirror_sweeps"])])
         self.y -= 10 * u
+        if s.revisiting_setup:
+            self.note(mark("Return keeps your curves. Marker, preset and count changes apply only when you refit."))
+            row([("REFIT", mark("Refit boundaries…"))])
+            self.y -= 10 * u
 
     def reference(self):
         s = self.s
-        text = self.text
-        button = self.button
-        p = self.painter
-        e = self.editor
-        x = self.x
-        cw = self.width
-        u = self.unit
         heading = self.heading
         row = self.row
         heading(mark("Reference & view"))
@@ -218,95 +217,65 @@ class Sidebar:
         row([("FRAME", mark("Frame face")), ("SOURCE", mark("Source / UV…"))])
 
     def navigation(self):
-        s = self.s
-        text = self.text
-        button = self.button
-        p = self.painter
-        e = self.editor
-        x = self.x
-        cw = self.width
-        u = self.unit
-        heading = self.heading
         row = self.row
         row([("NAV_FRONT", mark("Front")), ("NAV_RIGHT", mark("Right")), ("NAV_TOP", mark("Top"))])
 
-    def edit(self):
+    def curves(self):
+        s, u = self.s, self.unit
+        self.y -= 16 * u
+        self.painter.line((self.x, self.y + 6 * u),
+                          (self.x + self.width, self.y + 6 * u), BORDER, 0.7 * u)
+        self.text(mark("Shapes"), self.x, self.y - 14 * u, 13)
+        self.button("TRIANGLE", mark("+  Add shape"),
+                    (self.x + self.width - 130 * u, self.y - 24 * u, 130 * u, 28 * u),
+                    enabled=not s.busy, size=12, center=True)
+        self.y -= 36 * u
+        rows = max(3, min(5, int((self.editor.boxes["PANEL_BODY"].height / u - 620) / 38)))
+        height = (rows * 38 + 4) * u
+        body = Rect(round(self.x), round(self.y - height), round(self.width), round(height))
+        draw_shape_list(s, self.text, body)
+        self.y = body.y - 22 * u
+        self.heading(msg("Selected shape: {name}", name=contour_label(s.curve["name"])))
+        if s.curve["closed"]:
+            def row(items):
+                self.row(items, height=28, gap=6, size=12)
+
+            row([("LIT", mark("Lit cutout"), s.curve["operation"] == "REMOVE"),
+                 ("SHADOW", mark("Shadow patch"), s.curve["operation"] == "ADD")])
+            row([("SHAPE_NAME", mark("Rename shape…"))])
+            row([("TRANSFORM", mark("Move / Rotate / Scale…"))])
+            row([("DUPLICATE", mark("Duplicate")), ("DELETE_SHAPE", mark("Delete"))])
+            row([("UP", mark("Up"), False, s.contour > 1),
+                 ("DOWN", mark("Down"), False, s.contour < len(s.keyframe["contours"]) - 1),
+                 ("TOGGLE", mark("Hide") if s.curve["enabled"] else mark("Show"))])
+        else:
+            self.note(mark("The main boundary is always kept. Edit its points below or in the view."))
+        self.points()
+
+    def points(self):
         s = self.s
-        text = self.text
-        button = self.button
-        p = self.painter
-        e = self.editor
-        x = self.x
-        cw = self.width
-        u = self.unit
         heading = self.heading
         row = self.row
-        self.y -= 10 * u
-        heading(msg("Shadow keyframes · {count}", count=len(model.sweep(s.project, s.direction))))
-        row(
-            [
-                (
-                    "ADD_KEYFRAME",
-                    mark("Add keyframe"),
-                    False,
-                    len(model.sweep(s.project, s.direction)) < 33,
-                ),
-                (
-                    "REMOVE_KEYFRAME",
-                    mark("Remove"),
-                    False,
-                    0 < s.key_index < len(model.sweep(s.project, s.direction)) - 1,
-                ),
-            ]
-        )
-        row([("COPY_KEYFRAME", mark("Copy previous keyframe"), False, s.key_index > 0)])
-        row([("MIRROR", mark("Mirror Full Sweep"), s.project["mirror_sweeps"])])
-        self.y -= 10 * u
-        heading(mark("Contours"))
-        for index, c in enumerate(s.keyframe["contours"]):
-            sign = "+" if c["operation"] == "ADD" else "−"
-            row(
-                [
-                    (
-                        "LAYER:" + str(index),
-                        raw(
-                            ("· " if not c.get("enabled", True) else "")
-                            + sign
-                            + "  "
-                            + iface(contour_label(c["name"]))
-                        ),
-                        index == s.contour,
-                    )
-                ]
-            )
-        row([("TRIANGLE", mark("+  Add triangle"))])
-        if s.curve["closed"]:
-            row(
-                [
-                    ("LIT", mark("Lit area"), s.curve["operation"] == "REMOVE"),
-                    ("SHADOW", mark("Shadow area"), s.curve["operation"] == "ADD"),
-                ]
-            )
-            row([("DUPLICATE", mark("Duplicate")), ("DELETE_SHAPE", mark("Delete"))])
-            row(
-                [
-                    ("UP", mark("Up"), False, s.contour > 1),
-                    ("DOWN", mark("Down"), False, s.contour < len(s.keyframe["contours"]) - 1),
-                    ("TOGGLE", mark("Hide") if s.curve.get("enabled", True) else mark("Show")),
-                ]
-            )
-            row([("TRANSFORM", mark("Move / Rotate / Scale…"))])
-        self.y -= 10 * u
-        heading(msg("Point {index}", index=s.point + 1))
+        self.y -= 10 * self.unit
+        count = len(s.selected)
+        if count > 1:
+            self.note(msg("{count} points selected · active point {index}", count=count, index=s.point + 1))
+        else:
+            heading(msg("Point {index}", index=s.point + 1))
         point = s.curve["points"][s.point]
         row([("POINT", f"X {point['co'][0]:.4f}   Y {point['co'][1]:.4f}…")])
+        modes = {s.keyframe["contours"][ci]["points"][pi]["mode"]
+                 for ci, pi in s.selected or {(s.contour, s.point)}}
         row(
             [
-                ("SMOOTH", mark("Smooth"), point["mode"] == "AUTO"),
-                ("CORNER", mark("Corner"), point["mode"] == "CORNER"),
-                ("FREE", mark("Free"), point["mode"] == "FREE"),
+                ("SMOOTH", mark("Smooth"), modes == {"AUTO"}),
+                ("CORNER", mark("Corner"), modes == {"CORNER"}),
+                ("FREE", mark("Free"), modes == {"FREE"}),
             ]
         )
+        if count > 1:
+            self.y -= 6 * self.unit
+            self.note(mark("Handle mode: selected points. Coordinates / Insert / Remove: active point."))
         removable = len(s.curve["points"]) > (3 if s.curve["closed"] else 2) and (
             s.curve["closed"] or s.point not in (0, len(s.curve["points"]) - 1)
         )

@@ -19,10 +19,12 @@ class FaceSource:
     triangles: np.ndarray
     uvs: np.ndarray
     projected: np.ndarray
-    triangle_vertices: np.ndarray = None
-    material_indices: np.ndarray = None
-    materials: list = None
-    uv_layers: dict = None
+    triangle_vertices: np.ndarray
+    material_indices: np.ndarray
+    materials: list
+    uv_layers: dict
+    active_uv: str
+    render_uv: str
 
 
 def selected_faces(obj):
@@ -44,12 +46,12 @@ def selected_faces(obj):
     return [p.index for p in obj.data.polygons if p.select and not p.hide]
 
 
-def capture(obj, region="SELECTED", group="", uv_name="", require_edit=True):
+def capture(obj, region="SELECTED", group=""):
     if not obj or obj.type != "MESH":
         raise UserError("Make a mesh active before creating an SDF project.")
-    if region == "SELECTED" and require_edit and obj.mode != "EDIT":
+    if region == "SELECTED" and obj.mode != "EDIT":
         raise UserError("Select facial geometry in Edit Mode, or choose Vertex Group.")
-    uv_name = uv_name or (obj.data.uv_layers.active.name if obj.data.uv_layers.active else "")
+    uv_name = obj.data.uv_layers.active.name if obj.data.uv_layers.active else ""
     ids = selected_faces(obj) if region == "SELECTED" else None
     return extract(
         obj, uv_name, region=region, selected=ids, group=group, validate=False, front_only=False
@@ -167,10 +169,6 @@ def _extract_object_mode(
             [list(obj.matrix_world @ mesh.vertices[v].co) for v in vids], dtype=np.float64
         )
         triangles = np.asarray([[remap[v] for v in t.vertices] for t in tris], dtype=np.int32)
-        layer = mesh.uv_layers[uv_name]
-        uvs = np.asarray(
-            [[list(layer.data[li].uv) for li in t.loops] for t in tris], dtype=np.float64
-        )
         all_uvs = {
             uv.name: np.asarray(
                 [[list(uv.data[li].uv) for li in t.loops] for t in tris], dtype=np.float64
@@ -191,11 +189,12 @@ def _extract_object_mode(
         if front_only:
             keep = area(local[triangles][..., :2]) > 1e-10
             excluded = int((~keep).sum())
-            triangles, uvs = triangles[keep], uvs[keep]
+            triangles = triangles[keep]
             triangle_vertices, material_indices = triangle_vertices[keep], material_indices[keep]
             all_uvs = {name: arr[keep] for name, arr in all_uvs.items()}
             if not len(triangles):
                 raise UserError("The frontal subset is empty. Reset the face orientation.")
+        uvs = all_uvs[uv_name]
         if validate:
             validate_uv(uvs, vertices[triangles])
         digest = hashlib.sha256()
@@ -224,13 +223,15 @@ def _extract_object_mode(
             material_indices,
             materials,
             all_uvs,
+            mesh.uv_layers.active.name if mesh.uv_layers.active else "",
+            next((uv.name for uv in mesh.uv_layers if uv.active_render), ""),
         )
     finally:
         evaluated.to_mesh_clear()
 
 
-def from_reference(ref, alignment, obj=None, validate=True, allow_relink=False):
-    target = obj or bpy.data.objects.get(ref["object"])
+def from_reference(ref, alignment, *, validate=True, allow_relink=False):
+    target = bpy.data.objects.get(ref["object"])
     face = extract(
         target,
         ref["uv_map"],
@@ -238,8 +239,8 @@ def from_reference(ref, alignment, obj=None, validate=True, allow_relink=False):
         selected=ref["faces"],
         alignment=alignment,
         validate=validate,
-        front_only=ref.get("front_only", False),
-        group=ref.get("vertex_group", ""),
+        front_only=ref["front_only"],
+        group=ref["vertex_group"],
     )
     if not allow_relink and face.reference["faces"] != ref["faces"]:
         raise UserError("Vertex-group membership changed. Relink the source before regenerating.")

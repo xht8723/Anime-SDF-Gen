@@ -54,6 +54,12 @@ def workflow():
             "workspaces",
         )
     }
+    obj = bpy.data.objects["body"]
+    uv = obj.data.uv_layers.new(name="Bake_B")
+    for target, original in zip(uv.data, obj.data.uv_layers["UVMap"].data):
+        target.uv = (original.uv.x * 0.45 + 0.5, original.uv.y)
+    obj.data.uv_layers.active = obj.data.uv_layers["UVMap"]
+    bpy.context.view_layer.update()
     face = fixture_face(source)
     project = model.new_project(
         face.reference, face.alignment, preset="NOSE", resolution=512, output=str(OUT / "face")
@@ -95,7 +101,7 @@ def workflow():
     # A real slider drag must not disturb the orbit or raw field cache.
     raw = s.preview.raw_thresholds
     cache = {k: id(v) for k, v in s.preview.field_cache.items()}
-    x, y, w, h = e.boxes["SMOOTHING_TRACK"]
+    x, y, w, _ = e.boxes["SMOOTHING_TRACK"]
     start = (x, y)
     end = (x + w, y)
     event("MOUSEMOVE", "NOTHING", start)
@@ -153,6 +159,7 @@ def workflow():
     )
 
     # Rebuild the popup after serialization, keeping only project data.
+    s.set_bake_uv("Bake_B")
     art = model.dumps(s.project)
     old = s.registry.id
     with bpy.context.temp_override(window=e.window, area=e.native_area):
@@ -168,6 +175,8 @@ def workflow():
     s = session.ACTIVE
     e = s.editor
     assert model.dumps(s.project) == art
+    assert s.project["source"]["uv_map"] == s.project["authoring"]["uv_map"] == "Bake_B"
+    assert s.preview_object.data.uv_layers.active.name == "UVMap"
     yield from wait_for(
         lambda: s.preview.filtered_key is not None and s.preview.thresholds is not None, 90
     )

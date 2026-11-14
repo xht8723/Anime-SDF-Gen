@@ -51,15 +51,16 @@ class SweepTests(unittest.TestCase):
         index = 3
         frame = model.get_keyframe(p, model.LTR, index)
         frame["contours"][0]["points"][3]["co"][0] += 0.02
-        model.synchronize_mirror(p, model.LTR)
+        model.synchronize_mirror(p)
         for i, k in enumerate(model.sweep(p, model.LTR)):
             if i != index:
                 self.assertEqual(k, before[i])
         reflected = model.get_keyframe(p, model.RTL, index)["contours"][0]["points"][3]["co"][0]
         self.assertAlmostEqual(reflected, 1 - frame["contours"][0]["points"][3]["co"][0])
         model.get_keyframe(p, model.RTL, 0)["contours"].append(model.triangle())
-        model.synchronize_mirror(p, model.RTL)
-        self.assertEqual(len(model.get_keyframe(p, model.LTR, 0)["contours"]), 2)
+        model.synchronize_mirror(p)
+        self.assertEqual(len(model.get_keyframe(p, model.LTR, 0)["contours"]), 1)
+        self.assertEqual(len(model.get_keyframe(p, model.RTL, 0)["contours"]), 1)
         self.assertEqual(len(model.get_keyframe(p, model.LTR, -1)["contours"]), 1)
 
     def test_independent_insert_remove_copy_and_history(self):
@@ -81,10 +82,35 @@ class SweepTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 model.remove_keyframe(p, model.LTR, i)
         p["mirror_sweeps"] = True
-        model.synchronize_mirror(p, model.RTL)
-        model.insert_keyframe(p, model.RTL, 3)
+        model.synchronize_mirror(p)
+        model.insert_keyframe(p, model.LTR, 3)
         self.assertEqual(len(model.sweep(p, model.LTR)), 7)
         self.assertEqual(model.loads(model.dumps(p)), p)
+
+    def test_locked_mutations_are_atomic_and_left_structure_is_mirrored(self):
+        p = project(5)
+        before = copy.deepcopy(p)
+        for change in (model.insert_keyframe, model.remove_keyframe, model.copy_previous):
+            with self.assertRaisesRegex(ValueError, "Turn off Mirror Full Sweep"):
+                change(p, model.RTL, 2)
+            self.assertEqual(p, before)
+        p["sweeps"][model.LTR][2]["contours"].append(model.triangle())
+        for change in (model.insert_keyframe, model.copy_previous, model.remove_keyframe):
+            change(p, model.LTR, 2)
+            self.assertEqual(
+                p["sweeps"][model.RTL], [model.mirror_keyframe(k) for k in p["sweeps"][model.LTR]]
+            )
+        model.refit(p, 33)
+        before = copy.deepcopy(p)
+        with self.assertRaisesRegex(ValueError, "maximum is 33"):
+            model.insert_keyframe(p, model.LTR, 2)
+        for index in (0, 32):
+            with self.assertRaisesRegex(ValueError, "first and last"):
+                model.remove_keyframe(p, model.LTR, index)
+        self.assertEqual(p, before)
+        self.assertEqual(
+            p["sweeps"][model.RTL], [model.mirror_keyframe(k) for k in p["sweeps"][model.LTR]]
+        )
 
     def test_conflict_labels_identify_row_and_one_based_frames(self):
         p = project(6, False)

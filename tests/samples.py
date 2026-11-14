@@ -6,7 +6,18 @@ from anime_sdf_gen.core import model
 
 def project(keyframes=5, mirror=True):
     return model.new_project(
-        {"object": "test", "fingerprint": "fixture"},
+        {
+            "blend_file": "",
+            "object": "test",
+            "mesh": "test",
+            "uv_map": "UVMap",
+            "region": "SELECTED",
+            "faces": [0],
+            "front_only": True,
+            "vertex_group": "",
+            "excluded_triangles": 0,
+            "fingerprint": "fixture",
+        },
         {
             "center": [0, 0, 0],
             "right": [1, 0, 0],

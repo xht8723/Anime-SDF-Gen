@@ -12,7 +12,7 @@ def available(frame):
     return {
         (ci, pi)
         for ci, c in enumerate(frame["contours"])
-        if c.get("enabled", True)
+        if c["enabled"]
         for pi in range(len(c["points"]))
     }
 
@@ -41,15 +41,14 @@ def affine(frame, selected, matrix, delta, pivot, handle="co"):
         old = frame["contours"][ci]["points"][pi]
         pt = result["contours"][ci]["points"][pi]
         co = np.asarray(old["co"])
-        offset = delta
         if handle == "co":
-            pt["co"] = (pivot + matrix @ (co - pivot) + offset).tolist()
+            pt["co"] = (pivot + matrix @ (co - pivot) + delta).tolist()
             for side in ("left", "right"):
                 pt[side] = (matrix @ np.asarray(old[side])).tolist()
         else:
             left, right = handles(frame["contours"][ci], pi)
             pt.update(mode="FREE", left=(left - co).tolist(), right=(right - co).tolist())
-            pt[handle] = (matrix @ np.asarray(pt[handle]) + offset).tolist()
+            pt[handle] = (matrix @ np.asarray(pt[handle]) + delta).tolist()
         if any(
             not math.isfinite(v) or abs(v) > 100 for key in ("co", "left", "right") for v in pt[key]
         ):
@@ -89,10 +88,10 @@ class Transform:
         self.number = ""
         self.handle = handle
         self.metric = np.array([1.0, float(aspect)])
-        self.coords = np.array(
+        coords = np.array(
             [frame["contours"][ci]["points"][pi]["co"] for ci, pi in sorted(self.selected)]
         )
-        self.pivot = self.coords.mean(axis=0)
+        self.pivot = coords.mean(axis=0)
         self.last = np.asarray(mouse, dtype=float) * self.metric
         self.delta = np.zeros(2)
         self.angle = 0.0

@@ -18,7 +18,6 @@ DOCS = (
     "i18n-development.md",
 )
 TOOLS = ("package.py", "validate.py", "verify_release.py", "check_i18n.py")
-EXCLUDED_TESTS = {"blender_character_toon.py"}
 
 
 def write_archive(target, entries):
@@ -51,7 +50,7 @@ def main():
         ("docs/" + name, ROOT / name)
         for name in ("usage.md", "usage.zh-Hans.md", "output-format.md")
     )
-    tests = [p for p in (ROOT / "tests").glob("*.py") if p.name not in EXCLUDED_TESTS]
+    tests = list((ROOT / "tests").glob("*.py"))
     tests.extend((ROOT / "tests/data").glob("*.npz"))
     source = (
         package_files

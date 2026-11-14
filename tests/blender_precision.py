@@ -130,7 +130,7 @@ def tests():
         )
         assert not np.array_equal(s.preview.thresholds, raw)
         s.preview.render()
-        direction, progress = model.rotation_sample(83)
+        _, progress = model.rotation_sample(83)
         np.testing.assert_array_equal(
             s.preview.rgba[..., 0], decode(s.preview.thresholds[..., 0], progress)
         )

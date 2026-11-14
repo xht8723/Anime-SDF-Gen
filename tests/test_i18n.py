@@ -1,11 +1,9 @@
 """Catalog, deferred diagnostics and mixed Chinese/Latin layout behavior."""
 
 import copy
-import sys
 import unittest
 from anime_sdf_gen.catalog import ENTRIES
 from anime_sdf_gen.core.messages import (
-    Message,
     Joined,
     Literal,
     msg,
@@ -47,7 +45,7 @@ class TranslationTests(unittest.TestCase):
             progress=0.25,
         )
         self.assertEqual(str(item), "Left → Right keyframe 2/9 · 25%")
-        self.assertEqual(item.render(tr), "左 → 右关键帧 2/9 · 25%")
+        self.assertEqual(item.render(tr), "左 → 右 · 关键帧 2/9 · 25%")
         joined = Joined((msg("Front"), msg("Back")))
         self.assertEqual(joined.render(tr), "正面, 背面")
         self.assertEqual(copy.deepcopy(item), item)
@@ -65,8 +63,8 @@ class TranslationTests(unittest.TestCase):
 
     def test_generated_names_and_user_names_are_not_rewritten(self):
         tr = lambda s: dict(ENTRIES).get(s, s)
-        self.assertEqual(contour_label("Triangle 12 copy copy").render(tr), "三角形 12 副本 副本")
-        self.assertEqual(str(contour_label("Triangle 2 copy")), "Triangle 2 copy")
+        self.assertEqual(contour_label("Shape 12 copy copy").render(tr), "形状 12 副本 副本")
+        self.assertEqual(str(contour_label("Shape 2 copy")), "Shape 2 copy")
         self.assertIsInstance(contour_label("Smoothing"), Literal)
         self.assertIsInstance(contour_label("下巴亮部"), Literal)
         self.assertIsInstance(contour_label("Main boundary 2"), Literal)

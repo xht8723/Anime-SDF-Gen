@@ -2,6 +2,7 @@
 
 from copy import deepcopy
 from . import session
+from .core import model
 
 
 def bind(operator, current, target=False, snapshot=False):
@@ -22,6 +23,8 @@ def bind(operator, current, target=False, snapshot=False):
 def current(operator, stages=None, allow_busy=False):
     s = session.ACTIVE
     if s is None or s.closed or (s.busy and not allow_busy):
+        return None
+    if s.project["mirror_sweeps"] and s.direction == model.RTL:
         return None
     if hasattr(operator, "owner") and operator.owner != s.registry.id:
         return None

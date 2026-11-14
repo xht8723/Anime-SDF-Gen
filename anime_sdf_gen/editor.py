@@ -22,10 +22,13 @@ class Editor:
         self.boxes, self.widgets = {}, []
         self.ready = False
         self.phase = "NEW"
-        self.saved = deepcopy(layout or {})
-        self.split_ratio = self.saved.get("split_ratio", 0.54)
-        self.focus = self.saved.get("focus")
-        self.panel_scroll = 0
+        self.saved = deepcopy(layout)
+        self.split_ratio = self.saved["split_ratio"] if self.saved is not None else 0.54
+        self.focus = self.saved["focus"] if self.saved is not None else None
+        self.panel_scroll = self.panel_scroll_max = 0
+        self.shape_scroll = self.shape_scroll_max = 0
+        self.shape_selection = None
+        self.shape_list = self.shape_scroll_track = self.shape_scroll_thumb = None
         self._native_fullscreen = False
         self.buffers = {}
         self.reference_keys = {}
@@ -147,10 +150,10 @@ class Editor:
         setup = self.session.stage in ("ORIENT", "FIT")
         confirm = self.session.stage == "CONFIRM"
         top = round(90 * u)
-        shelf = 0 if setup else round((100 if confirm else 158) * u)
-        panel = round(min(330 * u, w * 0.32))
+        panel = round(min((360 if self.session.stage == "EDIT" else 330) * u, w * 0.32))
         available = max(2, w - panel)
-        bottom = min(shelf, h // 3)
+        shelf = 0 if setup else round((100 if confirm else 228 if available >= 920 * u else 260) * u)
+        bottom = min(shelf, round(h * 0.42))
         body_h = max(1, h - top - bottom)
         self.boxes = {
             "TOP": Rect(0, h - top, w, top),
@@ -158,6 +161,8 @@ class Editor:
             "PANEL": Rect(available, 0, panel, h - top),
             "SLIDER": (130 * u, 34 * u, max(1, available - 152 * u), 22 * u),
         }
+        if self.session.stage == "EDIT":
+            self.boxes["TIMELINE"] = self.boxes["SHELF"]
         focus = (
             "AUTHOR"
             if setup
@@ -175,7 +180,7 @@ class Editor:
             self.boxes["DIVIDER"] = Rect(split, bottom, divider, body_h)
         for name, b in bounds.items():
             self.boxes[name] = b
-            help_height = round(56 * u)
+            help_height = round((108 if self.session.stage == "EDIT" else 56) * u)
             self.views[name].region = Rect(b.x, b.y, b.width, max(1, b.height - help_height))
             self.views[name].update()
 
@@ -186,6 +191,14 @@ class Editor:
             )
         except ReferenceError:
             return False
+
+    def drag_shape_scroll(self, mouse_y, grab):
+        track, thumb = self.shape_scroll_track, self.shape_scroll_thumb
+        if track and thumb:
+            travel = max(1, track.height - thumb.height)
+            fraction = (track.y + travel - (mouse_y - grab)) / travel
+            self.shape_scroll = round(max(0, min(1, fraction)) * self.shape_scroll_max)
+            self.redraw()
 
     def owns_context(self, context):
         return self.alive() and context.window == self.window and context.area == self.native_area
@@ -303,13 +316,14 @@ class Editor:
         }
 
     def restore_views(self):
-        for name, values in self.saved.get("views", {}).items():
+        if self.saved is None:
+            return
+        for name, values in self.saved["views"].items():
             v = self.views[name]
             v.frame_pending = False
             v.view_location = Vector(values["location"])
             v.view_rotation = Quaternion(values["rotation"])
             v.view_distance = values["distance"]
-            v.update()
             v.view_perspective = values["perspective"]
             v.update()
 

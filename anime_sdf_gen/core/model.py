@@ -57,7 +57,7 @@ def triangle():
     rx, ry = 0.085, 0.055
     return {
         "id": uid(),
-        "name": "Triangle",
+        "name": "Shape",
         "closed": True,
         "operation": "ADD",
         "enabled": True,
@@ -121,7 +121,7 @@ def new_project(
             "reference": "NEUTRAL",
             "keyframe_count": count,
             "front_only": True,
-            "uv_map": source.get("uv_map", ""),
+            "uv_map": source["uv_map"],
         },
         "encoding": deepcopy(ENCODING),
     }
@@ -150,10 +150,14 @@ def mirror_keyframe(frame):
     return result
 
 
-def synchronize_mirror(project, edited=LTR):
+def require_editable_sweep(project, direction):
+    if project["mirror_sweeps"] and direction == RTL:
+        raise UserError("Mirrored from Left → Right. Turn off Mirror Full Sweep to edit.")
+
+
+def synchronize_mirror(project):
     if project["mirror_sweeps"]:
-        opposite = RTL if edited == LTR else LTR
-        project["sweeps"][opposite] = [mirror_keyframe(k) for k in sweep(project, edited)]
+        project["sweeps"][RTL] = [mirror_keyframe(k) for k in sweep(project, LTR)]
 
 
 def refit(project, count=None):
@@ -180,16 +184,18 @@ def refit(project, count=None):
 
 
 def copy_previous(project, direction, index):
+    require_editable_sweep(project, direction)
     if index <= 0:
         raise UserError("The first keyframe has no previous keyframe.")
     frames = sweep(project, direction)
     frames[index]["contours"] = deepcopy(frames[index - 1]["contours"])
     for c in frames[index]["contours"]:
         c["id"] = uid()
-    synchronize_mirror(project, direction)
+    synchronize_mirror(project)
 
 
 def insert_keyframe(project, direction, index):
+    require_editable_sweep(project, direction)
     frames = sweep(project, direction)
     if len(frames) >= MAX_KEYFRAMES:
         raise UserError("The maximum is 33 keyframes per sweep.")
@@ -200,16 +206,17 @@ def insert_keyframe(project, direction, index):
         (frames[index]["progress"] + frames[index + 1]["progress"]) / 2,
     )
     frames.insert(index + 1, new)
-    synchronize_mirror(project, direction)
+    synchronize_mirror(project)
     return index + 1
 
 
 def remove_keyframe(project, direction, index):
+    require_editable_sweep(project, direction)
     frames = sweep(project, direction)
     if index <= 0 or index >= len(frames) - 1:
         raise UserError("Keep the first and last keyframes of each sweep.")
     del frames[index]
-    synchronize_mirror(project, direction)
+    synchronize_mirror(project)
     return index - 1
 
 
@@ -252,6 +259,14 @@ def set_packing(project, name, route):
     project["settings"]["packing"] = validate_packing(packing)
 
 
+def _require_fields(value, fields, path=""):
+    if not isinstance(value, dict):
+        raise UserError("Project field {key} must be an object.", key=path or "project")
+    for field in fields:
+        if field not in value:
+            raise UserError("Project is missing {key}.", key=path + field)
+
+
 def validate_project(p):
     if not isinstance(p, dict) or (
         p.get("format") != FORMAT_ID or p.get("format_version") != FORMAT_VERSION
@@ -259,9 +274,36 @@ def validate_project(p):
         raise UserError(
             "Unsupported project format. Create a new Anime SDF Gen project with this release."
         )
-    for key in ("source", "alignment", "landmarks", "sweeps", "settings", "mirror_sweeps"):
-        if key not in p:
-            raise UserError("Project is missing {key}.", key=key)
+    _require_fields(
+        p,
+        (
+            "id", "source", "alignment", "landmarks", "sweeps", "settings",
+            "mirror_sweeps", "preset", "authoring", "encoding",
+        ),
+    )
+    _require_fields(
+        p["source"],
+        (
+            "blend_file", "object", "mesh", "uv_map", "region", "faces",
+            "front_only", "vertex_group", "excluded_triangles", "fingerprint",
+        ),
+        "source.",
+    )
+    _require_fields(
+        p["alignment"], ("center", "forward", "up", "right", "width", "height"), "alignment."
+    )
+    _require_fields(p["landmarks"], DEFAULT_LANDMARKS, "landmarks.")
+    _require_fields(p["sweeps"], SWEEP_LABELS, "sweeps.")
+    _require_fields(
+        p["settings"],
+        ("resolution", "preview_size", "padding", "output", "packing", "bit_depth", "smoothing"),
+        "settings.",
+    )
+    _require_fields(
+        p["authoring"],
+        ("stage", "anchors", "reference", "keyframe_count", "front_only", "uv_map"),
+        "authoring.",
+    )
     if not isinstance(p["mirror_sweeps"], bool) or set(p["sweeps"]) != set(SWEEP_LABELS):
         raise UserError("The project requires two complete boundary sweeps.")
     if p["settings"]["resolution"] not in (512, 1024, 2048, 4096):
@@ -298,6 +340,8 @@ def validate_project(p):
             if len(cs) > 128:
                 raise UserError("Too many shapes in a keyframe.")
             for c in cs:
+                if not isinstance(c.get("enabled"), bool):
+                    raise UserError("Contour visibility must be true or false.")
                 if (
                     c["operation"] not in ("ADD", "REMOVE")
                     or not (3 if c["closed"] else 2) <= len(c["points"]) <= 256
@@ -316,8 +360,8 @@ def validate_project(p):
         k["progress"] for k in sweep(p, RTL)
     ]:
         raise UserError("Mirrored sweeps must have matching keyframe positions.")
-    authoring = p.get("authoring", {})
-    if authoring.get("stage") not in ("ORIENT", "FIT", "EDIT", "CONFIRM"):
+    authoring = p["authoring"]
+    if authoring.get("stage") not in ("ORIENT", "FIT", "EDIT", "CONFIRM", "REORIENT", "REFIT"):
         raise UserError("Invalid authoring stage.")
     if authoring.get("reference") not in ("NEUTRAL", "MATERIAL"):
         raise UserError("Invalid reference appearance.")
@@ -330,7 +374,8 @@ def validate_project(p):
         or not MIN_KEYFRAMES <= authoring["keyframe_count"] <= 33
     ):
         raise UserError("Invalid shadow keyframe count.")
-    for name, anchor in authoring.get("anchors", {}).items():
+    _require_fields(authoring["anchors"], (), "authoring.anchors")
+    for name, anchor in authoring["anchors"].items():
         if name not in ("nose", "mouth", "chin") or not isinstance(anchor, dict):
             raise UserError("Invalid landmark anchor.")
         if len(anchor.get("world", [])) != 3 or any(not math.isfinite(v) for v in anchor["world"]):

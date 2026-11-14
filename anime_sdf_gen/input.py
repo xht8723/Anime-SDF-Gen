@@ -8,9 +8,10 @@ from . import session
 from .commands import action
 from .curve_input import CurveInput
 from .interface import dispatch
+from .native_ui import NATIVE_ACTIONS
 from .navigation import LOCKED_NAVIGATION
 from .viewport import scale, window_region
-from .canvas import inside, pick
+from .canvas import inside, pick, widget_at
 
 
 class ANIME_SDF_GEN_OT_interact(bpy.types.Operator):
@@ -36,6 +37,7 @@ class ANIME_SDF_GEN_OT_interact(bpy.types.Operator):
     def _finish(self, context):
         s = session.ACTIVE
         if s and s.registry.id == self.owner:
+            s.native_ui.cancel()
             s.cancel_curve_edit()
             s._modal_running = False
             s.dragging = False
@@ -58,6 +60,7 @@ class ANIME_SDF_GEN_OT_interact(bpy.types.Operator):
             if s.registry.id != self.owner:
                 return self._finish(context)
             try:
+                s.native_ui.cancel()
                 s.cancel_curve_edit()
                 if self.transaction:
                     self.transaction.cancel()
@@ -83,6 +86,7 @@ class ANIME_SDF_GEN_OT_interact(bpy.types.Operator):
         native = window_region(e.native_area)
         e.navigation.poll()
         if event.type == "WINDOW_DEACTIVATE":
+            s.native_ui.cancel()
             e.clear_hover()
             s.cancel_curve_edit()
             if self.drag and self.drag[0] == "smoothing":
@@ -102,12 +106,20 @@ class ANIME_SDF_GEN_OT_interact(bpy.types.Operator):
         s.normalize_selection()
         mouse = np.array([event.mouse_x - native.x, event.mouse_y - native.y], dtype=float)
         e.resize(native)
+        if s.native_ui.handle_event(event, mouse):
+            return {"RUNNING_MODAL"}
+        if self.drag and self.drag[0] == "shape_scroll":
+            if event.type in {"MOUSEMOVE", "LEFTMOUSE"}:
+                e.drag_shape_scroll(mouse[1], self.drag[1])
+            if (event.type == "LEFTMOUSE" and event.value == "RELEASE") or event.type in {"ESC", "RIGHTMOUSE"}:
+                self.drag = None
+            return {"RUNNING_MODAL"}
         if self.drag and self.drag[0] == "smoothing":
             if event.type in ("ESC", "RIGHTMOUSE") and event.value == "PRESS":
                 s.preview.set_smoothing(self.drag[1])
                 self.drag = None
             elif event.type in ("MOUSEMOVE", "LEFTMOUSE"):
-                _, previous, x, w = self.drag
+                _, _, x, w = self.drag
                 s.preview.set_smoothing(round(float(np.clip((mouse[0] - x) / w * 8, 0, 8)), 2))
                 if event.type == "LEFTMOUSE" and event.value == "RELEASE":
                     self.drag = None
@@ -149,22 +161,21 @@ class ANIME_SDF_GEN_OT_interact(bpy.types.Operator):
             e.maximize(role)
             return {"RUNNING_MODAL"}
         if not self.drag:
-            hovered = next(
-                (
-                    widget
-                    for widget in reversed(e.widgets)
-                    if inside(mouse, widget["box"])
-                    and ("clip" not in widget or inside(mouse, widget["clip"]))
-                ),
-                None,
-            )
+            hovered = widget_at(e.widgets, mouse)
             hover = hovered["key"] if hovered else None
             e.set_hover(hover, mouse)
-            if event.type == "LEFTMOUSE" and event.value == "PRESS" and hovered:
+            if (
+                event.type == "LEFTMOUSE"
+                and hovered
+                and (
+                    event.value == "PRESS"
+                    or (event.value == "DOUBLE_CLICK" and hover in NATIVE_ACTIONS)
+                )
+            ):
                 e.clear_hover()
                 if hovered["enabled"]:
                     if hovered["key"] == "SMOOTHING_SLIDER":
-                        bx, by, bw, bh = hovered["box"]
+                        bx, _, bw, _ = hovered["box"]
                         x, w = bx + 12 * scale(), max(1, bw - 24 * scale())
                         self.drag = ("smoothing", s.project["settings"]["smoothing"], x, w)
                         s.preview.set_smoothing(
@@ -172,12 +183,23 @@ class ANIME_SDF_GEN_OT_interact(bpy.types.Operator):
                         )
                         return {"RUNNING_MODAL"}
                     e.navigation.stop()
-                    dispatch(s, hovered["key"])
+                    if hovered["key"] in NATIVE_ACTIONS:
+                        s.native_ui.arm(hovered["key"])
+                    else:
+                        dispatch(s, hovered["key"])
                     self.transaction = None
                     if not s.closed:
                         s.redraw()
                 return {"RUNNING_MODAL"}
         if s.busy:
+            return {"RUNNING_MODAL"}
+        if (not self.drag and s.stage == "EDIT" and e.shape_scroll_track
+                and event.type == "LEFTMOUSE" and event.value == "PRESS"
+                and e.shape_scroll_track.contains(mouse) and e.shape_list.contains(mouse)):
+            thumb = e.shape_scroll_thumb
+            grab = mouse[1] - thumb.y if thumb.contains(mouse) else thumb.height / 2
+            self.drag = ("shape_scroll", grab)
+            e.drag_shape_scroll(mouse[1], grab)
             return {"RUNNING_MODAL"}
         if (
             event.type in ("WHEELUPMOUSE", "WHEELDOWNMOUSE")
@@ -190,15 +212,17 @@ class ANIME_SDF_GEN_OT_interact(bpy.types.Operator):
                 e.warning_scroll = max(
                     0, min(e.warning_scroll_max, e.warning_scroll - direction * 36 * scale())
                 )
+            elif s.stage == "EDIT" and e.shape_list and e.shape_list.contains(mouse):
+                e.shape_scroll = max(0, min(e.shape_scroll_max, e.shape_scroll - direction))
             elif e.boxes["PANEL"].contains(mouse):
                 e.panel_scroll = max(
                     0,
                     min(
-                        getattr(e, "panel_scroll_max", 0), e.panel_scroll - direction * 48 * scale()
+                        e.panel_scroll_max, e.panel_scroll - direction * 48 * scale()
                     ),
                 )
-            elif s.stage == "EDIT" and e.boxes["SHELF"].contains(mouse):
-                s.keyframe_scroll = max(0, getattr(s, "keyframe_scroll", 0) - direction)
+            elif s.stage == "EDIT" and e.boxes["TIMELINE"].contains(mouse):
+                s.keyframe_scroll = max(0, s.keyframe_scroll - direction)
             else:
                 direction = None
             if direction is not None:
@@ -238,7 +262,7 @@ class ANIME_SDF_GEN_OT_interact(bpy.types.Operator):
             mode = self.drag[0]
             if event.type == "MOUSEMOVE" or (mode == "rotation" and event.type == "LEFTMOUSE"):
                 if mode == "divider":
-                    e.split_ratio = float(np.clip(mouse[0] / e.boxes["SHELF"].width, 0.25, 0.75))
+                    e.split_ratio = float(np.clip(mouse[0] / e.boxes["PANEL"].x, 0.25, 0.75))
                 else:
                     x, y, w, h = e.boxes["SLIDER"]
                     s.rotation = float(np.clip((mouse[0] - x) / w * 360, 0, 360))

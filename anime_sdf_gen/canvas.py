@@ -113,7 +113,7 @@ def pick(s, mouse, view):
                 candidates.append((np.linalg.norm(np.array(q) - mouse), ("landmark", name)))
     else:
         for ci, c in enumerate(s.keyframe["contours"]):
-            if not c.get("enabled", True):
+            if not c["enabled"]:
                 continue
             for pi, p in enumerate(c["points"]):
                 q = to_view(s, p["co"], view)
@@ -133,3 +133,16 @@ def pick(s, mouse, view):
 def inside(point, box):
     x, y, w, h = box
     return x <= point[0] <= x + w and y <= point[1] <= y + h
+
+
+def widget_at(widgets, mouse):
+    """Topmost control under the pointer, respecting sidebar clipping."""
+    return next(
+        (
+            widget
+            for widget in reversed(widgets)
+            if inside(mouse, widget["box"])
+            and ("clip" not in widget or inside(mouse, widget["clip"]))
+        ),
+        None,
+    )

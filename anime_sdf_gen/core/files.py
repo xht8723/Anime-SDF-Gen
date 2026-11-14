@@ -127,7 +127,7 @@ def export_steps(project, image, base):
                         "Encode {filename}", filename=texture["path"].name
                     ), 0.99 + 0.007 * i / len(textures)
                 stream.flush()
-            for label, progress in verify_steps(stages[i], packed, bits):
+            for _, progress in verify_steps(stages[i], packed, bits):
                 yield msg("Verify {filename}", filename=texture["path"].name), 0.99 + 0.008 * (
                     i + progress
                 ) / len(textures)

@@ -121,6 +121,7 @@ class SchemaTests(unittest.TestCase):
             {"format": "different_tool"},
             {"format_version": 1},
             {"format_version": 2},
+            {"format_version": 3},
             {"format_version": model.FORMAT_VERSION + 1},
         ):
             invalid = copy.deepcopy(p)
@@ -133,8 +134,37 @@ class SchemaTests(unittest.TestCase):
             model.loads(json.dumps(invalid))
         invalid = copy.deepcopy(p)
         invalid["authoring"].pop("front_only")
-        with self.assertRaisesRegex(ValueError, "authoring source settings"):
+        with self.assertRaisesRegex(ValueError, "authoring.front_only"):
             model.loads(json.dumps(invalid))
+
+    def test_missing_current_fields_are_rejected_without_defaults(self):
+        for path in (
+            ("source", "uv_map"),
+            ("source", "front_only"),
+            ("source", "vertex_group"),
+            ("authoring", "anchors"),
+            ("landmarks", "nose"),
+            ("settings", "preview_size"),
+        ):
+            p = project()
+            del p[path[0]][path[1]]
+            before = copy.deepcopy(p)
+            with self.subTest(path=path), self.assertRaisesRegex(ValueError, "Project is missing"):
+                model.loads(json.dumps(p))
+            self.assertEqual(p, before)
+        for value in (None, 1, "true"):
+            p = project()
+            contour = model.get_keyframe(p, model.LTR, 0)["contours"][0]
+            if value is None:
+                del contour["enabled"]
+            else:
+                contour["enabled"] = value
+            with self.subTest(visibility=value), self.assertRaisesRegex(ValueError, "visibility"):
+                model.loads(json.dumps(p))
+        p = project()
+        p["authoring"]["anchors"] = None
+        with self.assertRaisesRegex(ValueError, "authoring.anchors.*object"):
+            model.loads(json.dumps(p))
 
     def test_surface_anchor_roundtrip_and_refit_retains_patches(self):
         p = project()
@@ -158,15 +188,34 @@ class SchemaTests(unittest.TestCase):
 
 
 class UVTests(unittest.TestCase):
-    def test_uv_shared_edges_valid_overlap_invalid(self):
+    def test_uv_shared_edges_and_overlaps_accepted(self):
         valid = np.array([[[0, 0], [1, 0], [1, 1]], [[0, 0], [1, 1], [0, 1]]], float)
         geometry.validate_uv(valid)
-        with self.assertRaisesRegex(ValueError, "Overlapping"):
-            geometry.validate_uv(np.concatenate([valid, valid[:1]]))
+        geometry.validate_uv(np.concatenate([valid, valid[:1], valid[:, ::-1]]))
         with self.assertRaisesRegex(ValueError, "zero-area"):
             geometry.validate_uv(np.zeros((1, 3, 2)))
         with self.assertRaisesRegex(ValueError, "0–1"):
             geometry.validate_uv(valid + 2)
+        for invalid in (np.empty((0, 3, 2)), np.full_like(valid, np.nan), np.full_like(valid, np.inf)):
+            with self.assertRaisesRegex(ValueError, "finite UV"):
+                geometry.validate_uv(invalid)
+        with self.assertRaisesRegex(ValueError, "degenerate mesh"):
+            geometry.validate_uv(valid, np.zeros((2, 3, 3)))
+
+    def test_shared_texels_use_last_valid_triangle(self):
+        uv = np.array([[[0.1, 0.1], [0.9, 0.1], [0.1, 0.9]]] * 2)
+        left = np.array([[0, 0, 0], [0.4, 0, 0], [0, 1, 0]])
+        projected = np.stack([left, left + [0.6, 0, 0]])
+        depth, facing = run(geometry.projection_steps(projected, 64))
+        thresholds = np.full((64, 64, 2), 0.2, np.float32)
+        thresholds[:, 32:] = 0.8
+        forward = run(geometry.bake_steps(thresholds, uv, projected, depth, facing, 64))
+        reverse = run(geometry.bake_steps(thresholds, uv, projected[::-1], depth, facing, 64))
+        np.testing.assert_allclose(forward[20, 20], [0.8, 0.8, 1])
+        np.testing.assert_allclose(reverse[20, 20], [0.2, 0.2, 1])
+        projected[1, :, 2] = -1  # An occluded later triangle must not erase valid texels.
+        hidden = run(geometry.bake_steps(thresholds, uv, projected, depth, facing, 64))
+        np.testing.assert_allclose(hidden[20, 20], [0.2, 0.2, 1])
 
     def test_uv_transfer_padding_and_orientation(self):
         uv = np.array([[[0.1, 0.1], [0.9, 0.1], [0.9, 0.9]], [[0.1, 0.1], [0.9, 0.9], [0.1, 0.9]]])

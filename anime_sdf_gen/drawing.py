@@ -14,6 +14,7 @@ from mathutils import Vector
 from .viewport import scale
 from .canvas import label, lines, disc, rect, to_view, contour_lines
 from .core import curves, model
+from .theme import PREVIOUS_CURVE, NEXT_CURVE
 
 
 def face_shader():
@@ -57,11 +58,12 @@ def draw_author(s, region, view):
     for index in (s.key_index - 1, s.key_index + 1):
         if 0 <= index < len(frames):
             for c in frames[index]["contours"]:
-                if c.get("enabled", True):
-                    contour_lines(s, c, region, view, (0.4, 0.8, 0.9, 0.3))
+                if c["enabled"]:
+                    color = PREVIOUS_CURVE if index < s.key_index else NEXT_CURVE
+                    contour_lines(s, c, region, view, color)
     selected_contours = {ci for ci, _ in s.selected}
     for ci, c in enumerate(s.keyframe["contours"]):
-        if not c.get("enabled", True):
+        if not c["enabled"]:
             continue
         color = (1, 0.65, 0.18, 1) if ci in selected_contours else (0.4, 0.85, 0.9, 0.8)
         contour_lines(s, c, region, view, color, 2)
@@ -195,7 +197,6 @@ def view_buffer(s, role, native_region):
 def draw_popup(s):
     if s.closed or not s.editor or not s.editor.owns_context(bpy.context):
         return
-    start = time.perf_counter()
     e = s.editor
     region = bpy.context.region
     old_blend = gpu.state.blend_get()
@@ -238,12 +239,10 @@ def draw_popup(s):
         interface.build(s, region)
         s._draw_error = None
         if s.dragging or s.playing:
-            if not hasattr(s, "frame_times"):
-                s.frame_times = []
             s.frame_times.append(time.perf_counter())
             s.frame_times = s.frame_times[-512:]
     except Exception as exc:
-        if getattr(s, "_draw_error", None) != str(exc):
+        if s._draw_error != str(exc):
             traceback.print_exc()
             s._draw_error = str(exc)
             s.notify_error(exc)
@@ -266,7 +265,6 @@ def draw_popup(s):
         gpu.state.depth_mask_set(old_mask)
         gpu.state.line_width_set(1)
         gpu.state.blend_set(old_blend)
-        s.last_draw_ms = (time.perf_counter() - start) * 1000
 
 
 def attach(s):

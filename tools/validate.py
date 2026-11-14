@@ -22,9 +22,13 @@ def main(argv=None):
     parser.add_argument("--blender", default=shutil.which("blender"))
     parser.add_argument("--fixture", type=Path, default=ROOT / "test_sdf.blend")
     parser.add_argument("--output-dir", type=Path, default=ROOT / "build/validation" / version)
+    parser.add_argument("--resume", action="store_true",
+                        help="Reuse successful checks in this suite only when the runtime and commands match.")
     parser.add_argument(
         "--suite",
-        choices=("core", "guards", "lifecycle", "ui", "i18n", "export", "package", "all"),
+        choices=(
+            "core", "guards", "lifecycle", "uv", "mirror", "dialogs", "ux", "shapes", "ui", "i18n", "export", "package", "all"
+        ),
         default="all",
     )
     args = parser.parse_args(argv)
@@ -40,9 +44,33 @@ def main(argv=None):
         "checks": [],
     }
     manifest_path = out / f"run-{args.suite}.json"
+    completed = {}
+    if args.resume:
+        previous = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if previous["runtime_sha256"] != manifest["runtime_sha256"]:
+            parser.error("The runtime changed; run this suite without --resume.")
+        attempts = out / "attempts"
+        attempts.mkdir(exist_ok=True)
+        shutil.copy2(manifest_path, attempts / f"{args.suite}-{time.time_ns()}.json")
+        completed = {check["name"]: check for check in previous["checks"]}
+        manifest["resumed_checks"] = []
     started = time.perf_counter()
 
     def command(name, cmd, reports=(), timeout=420):
+        prior = completed.get(name)
+        if (prior and name not in {"package", "manifest", "archive"}
+                and prior["runtime_sha256"] == runtime_digest()
+                and prior["command"] == list(map(str, cmd))
+                and prior["reports"] == list(reports) and prior["exit_code"] == 0
+                and Path(prior["log"]).is_file()
+                and all((out / report).is_file()
+                        and json.loads((out / report).read_text(encoding="utf-8")).get("status") == "PASS"
+                        for report in reports)):
+            manifest["checks"].append(prior)
+            manifest["resumed_checks"].append(name)
+            manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+            print("Reused successful " + name, flush=True)
+            return
         print("Running " + name, flush=True)
         record = {
             "runtime_sha256": runtime_digest(),
@@ -137,6 +165,12 @@ def main(argv=None):
             )
         if suite in ("guards", "all"):
             blender("guards", "blender_guards.py", ("guards/guards.json",))
+        if suite in ("uv", "all"):
+            blender("uv-selection", "blender_uv_selection.py", ("uv-selection/uv-selection.json",))
+            blender(
+                "bugs-export", "blender_bugs_export.py", ("bugs-export/bugs-export.json",),
+                scene=ROOT / "bugs.blend",
+            )
         if suite in ("lifecycle", "all"):
             blender("sources", "blender_sources.py", ("sources/sources.json",))
             blender(
@@ -154,6 +188,51 @@ def main(argv=None):
                 ("window-lifecycle/window-lifecycle.json",),
                 gui=True,
             )
+        if suite in ("mirror", "ui", "all"):
+            for name, size, scale in (
+                ("mirror-lock-2k", (2560, 1600), "1.0"),
+                ("mirror-lock-4k", (3840, 2160), "1.5"),
+            ):
+                blender(
+                    name, "blender_mirror_lock.py", (name + "/mirror-lock.json",),
+                    gui=True, size=size, extra=("--case", name, "--ui-scale", scale),
+                )
+            if suite == "mirror":
+                blender(
+                    "curve-controls-2k", "blender_curve_controls.py",
+                    ("curve-controls-2k/curve-controls.json",), gui=True,
+                )
+                blender(
+                    "full-sweeps-2k", "blender_full_sweeps.py",
+                    ("full-sweeps-2k/full-sweeps.json",), gui=True,
+                )
+        if suite in ("dialogs", "ui", "all"):
+            for name, size, scale in (
+                ("native-dialogs-2k", (2560, 1600), "1.0"),
+                ("native-dialogs-4k", (3840, 2160), "1.5"),
+            ):
+                blender(
+                    name, "blender_native_dialogs.py", (name + "/native-dialogs.json",),
+                    gui=True, size=size, extra=("--case", name, "--ui-scale", scale),
+                )
+        if suite in ("ux", "ui", "all"):
+            for name, size, scale in (
+                ("artist-ux-2k", (2560, 1600), "1.0"),
+                ("artist-ux-4k", (3840, 2160), "1.5"),
+            ):
+                blender(
+                    name, "blender_artist_ux.py", (name + "/artist-ux.json",),
+                    gui=True, size=size, extra=("--case", name, "--ui-scale", scale),
+                )
+        if suite in ("shapes", "ux", "ui", "all"):
+            for name, size, scale in (
+                ("shape-sidebar-2k", (2560, 1600), "1.0"),
+                ("shape-sidebar-4k", (3840, 2160), "1.5"),
+            ):
+                blender(
+                    name, "blender_shape_sidebar.py", (name + "/shape-sidebar.json",),
+                    gui=True, size=size, extra=("--case", name, "--ui-scale", scale),
+                )
         if suite in ("ui", "all"):
             blender(
                 "preview-reference",

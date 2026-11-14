@@ -13,8 +13,18 @@ sys.path.insert(0, str(ROOT))
 from tests.support import runtime_digest
 
 REQUIRED = {
+    "shape-sidebar-2k",
+    "shape-sidebar-4k",
+    "artist-ux-2k",
+    "artist-ux-4k",
     "numerical",
     "guards",
+    "uv-selection",
+    "bugs-export",
+    "native-dialogs-2k",
+    "native-dialogs-4k",
+    "mirror-lock-2k",
+    "mirror-lock-4k",
     "sources",
     "integration",
     "saved-file",

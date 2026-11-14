@@ -1,6 +1,6 @@
 """Button explanations shared by selected, normal, and disabled popup states."""
 
-from .core.model import MAP_LABELS, SWEEP_LABELS
+from .core.model import MAP_LABELS, SWEEP_LABELS, sweep, keyframe_rotation
 from .core.messages import mark, msg, contour_label
 from .i18n import tip as translate_tip
 
@@ -16,6 +16,10 @@ TEXT = {
         mark("Set the base name shared by the textures and editable project."),
     ),
     "RESOLUTION": (mark("Texture resolution"), mark("Choose the size of all exported textures.")),
+    "BAKE_UV": (
+        mark("Bake UV map"),
+        mark("Choose the source UV map used for baking. Artwork and material UVs stay unchanged."),
+    ),
     "BIT_DEPTH": (
         mark("Output precision"),
         mark("Choose 8-bit PNG, 16-bit PNG (default), or 32-bit Float EXR for every output file."),
@@ -80,7 +84,7 @@ TEXT = {
     "SOURCE": (
         mark("Source and UV"),
         mark(
-            "Review the captured facial surface and output UV map. Return to orientation to change the UV map."
+            "Review the captured facial surface. Choose the bake UV map in Orientation or Confirm."
         ),
     ),
     "NAV_FRONT": (mark("Front view"), mark("Use Blender’s exact front view. Numpad 1.")),
@@ -101,19 +105,19 @@ TEXT = {
         mark("Replace this keyframe’s artwork with the preceding keyframe in this row."),
     ),
     "TRIANGLE": (
-        mark("Add triangle"),
+        mark("Add shape"),
         mark(
-            "Add and select a smooth three-point curve. Move/Rotate/Scale shortcuts adjust it; choose Lit area to carve light or Shadow area to darken."
+            "Add and select a smooth three-point shape. Use Lit cutout to carve light or Shadow patch to darken; rename it to describe the feature."
         ),
     ),
     "LIT": (
-        mark("Lit area"),
+        mark("Lit cutout"),
         mark(
             "Cut a lit area out of the shadow. This cutout also applies to earlier keyframes in the same sweep; edit its shape on this keyframe."
         ),
     ),
     "SHADOW": (
-        mark("Shadow area"),
+        mark("Shadow patch"),
         mark(
             "Fill this curve with shadow on the current keyframe. Later Lit cutouts still protect earlier keyframes."
         ),
@@ -152,6 +156,14 @@ TEXT = {
         mark("Split the following segment while preserving the current curve."),
     ),
     "DELETE_POINT": (mark("Remove point"), mark("Delete this point from the curve.")),
+    "SHAPE_NAME": (
+        mark("Rename shape"),
+        mark("Give the selected shape a descriptive name. Mirroring also updates its counterpart."),
+    ),
+    "REFIT": (
+        mark("Refit boundaries"),
+        mark("Replace main boundaries using the markers, preset and count. Shapes are copied from nearby frames; fewer frames can omit shapes. Opens a confirmation."),
+    ),
     "DISMISS_ERROR": (
         mark("Dismiss warning"),
         mark("Hide this message. The artwork still needs to pass validation before export."),
@@ -182,7 +194,9 @@ def describe(s, key, enabled=True):
         )
     elif key == "NEXT":
         tip = (
-            mark("Next step"),
+            mark("Return to editing") if s.stage == "FIT" and s.revisiting_setup else mark("Next step"),
+            mark("Return to your existing curves without refitting. Marker, preset and count changes are not applied to them.")
+            if s.stage == "FIT" and s.revisiting_setup else
             {
                 "ORIENT": mark("Use this view as the face’s front and place default markers."),
                 "FIT": mark(
@@ -223,7 +237,7 @@ def describe(s, key, enabled=True):
                 mark("Unlink the two complete sweeps for independent artwork and keyframe counts.")
                 if s.project["mirror_sweeps"]
                 else mark(
-                    "Reflect this entire sweep into the opposite row, keeping keyframe order. This replaces the opposite row’s artwork."
+                    "Reflect Left → Right into Right → Left, keeping keyframe order. This replaces and locks the right row’s artwork."
                 )
             ),
         )
@@ -243,7 +257,7 @@ def describe(s, key, enabled=True):
             mark("Curve visibility"),
             (
                 mark("Hide this curve’s effect, including carried light.")
-                if s.curve.get("enabled", True)
+                if s.curve["enabled"]
                 else mark("Show this curve’s effect, including carried light.")
             ),
         )
@@ -263,8 +277,10 @@ def describe(s, key, enabled=True):
                 direction=msg(SWEEP_LABELS[direction]),
                 index=index + 1,
             ),
-            mark(
-                "Edit this frame of the complete boundary sweep. Selecting it pauses the light orbit."
+            msg(
+                "Light angle: {angle:.2f}° · sweep progress: {progress:.1%}. Edit this boundary frame; selecting it pauses playback. The row arrow describes movement in the front view.",
+                angle=keyframe_rotation(direction, sweep(s.project, direction)[index]["progress"]),
+                progress=sweep(s.project, direction)[index]["progress"],
             ),
         )
     elif key.startswith("LANDMARK:"):
@@ -290,6 +306,8 @@ def describe(s, key, enabled=True):
         reason = (
             mark("Wait for generation to finish or cancel it.")
             if s.busy
+            else mark("Mirrored from Left → Right. Turn off Mirror Full Sweep to edit.")
+            if key.startswith("KEYFRAME:right_to_left:") and s.project["mirror_sweeps"]
             else {
                 "UNDO": mark("There are no edits to undo."),
                 "REDO": mark("There are no edits to redo."),

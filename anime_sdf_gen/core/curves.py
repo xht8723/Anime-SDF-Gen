@@ -154,7 +154,7 @@ def raster_layers(frame, direction, size, validate=True, cache=None):
     mask = np.zeros((size, size), dtype=bool)
     light = np.zeros_like(mask)
     for c in frame["contours"]:
-        if not c.get("enabled", True):
+        if not c["enabled"]:
             continue
         poly = polygon(c, direction, SPAN / (size * 4))
         if validate and self_intersects(poly):
@@ -182,7 +182,7 @@ def inherited_light(project, frame, direction, size, validate=True, cache=None):
     light = np.zeros((size, size), dtype=bool)
     for later in sweep(project, direction):
         if later["progress"] > frame["progress"] and any(
-            c["closed"] and c["operation"] == "REMOVE" and c.get("enabled", True)
+            c["closed"] and c["operation"] == "REMOVE" and c["enabled"]
             for c in later["contours"]
         ):
             light |= raster_layers(later, direction, size, validate, cache)[1]

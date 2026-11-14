@@ -82,6 +82,7 @@ class CurveInput:
         self.snap = self.precise = False
         self.box_start = None
         self.box_mode = "SET"
+        self.box_button = None
         self.box_selected = set()
 
     @property
@@ -107,6 +108,7 @@ class CurveInput:
 
     def begin(self, kind, mouse, view, direct=False):
         s = self.s
+        s.require_edit(("EDIT",))
         xy = from_view(s, mouse, view)
         if xy is None:
             return
@@ -216,7 +218,7 @@ class CurveInput:
                 return True
             operation = (
                 "SUB"
-                if event.ctrl or (getattr(self, "box_button", "") == "MIDDLEMOUSE")
+                if event.ctrl or self.box_button == "MIDDLEMOUSE"
                 else self.box_mode
             )
             if event.type == "MOUSEMOVE":
@@ -318,7 +320,7 @@ class CurveInput:
                 s.handle, s.contour, s.point = hit
                 s.selected = {(s.contour, s.point)}
                 s.sync_launcher()
-                bpy.ops.anime_sdf_gen.settings("INVOKE_DEFAULT", section="POINT")
+                s.native_ui.arm("POINT", button=button, widget=False)
             return True
         if event.type != button or event.value != "PRESS":
             return False

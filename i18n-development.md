@@ -26,14 +26,29 @@ The popup uses Blender's bundled font and CJK fallback. Mixed Chinese/Latin wrap
 | English | 简体中文 |
 |---|---|
 | Shadow keyframes | 阴影关键帧 |
-| Main boundary | 主边界 |
-| Mirror Full Sweep | 镜像完整扫掠 |
-| Lit area / Shadow area | 亮部 / 暗部 |
-| Fitting markers | 拟合标记 |
+| Main boundary | 明暗分界线 |
+| Mirror Full Sweep | 镜像同步关键帧 |
+| Keyframes per sweep | 每组关键帧数 |
+| Lit cutout / Shadow patch | 亮区 / 阴影区 |
+| Fitting markers | 面部定位点 |
+| Refit boundaries… | 重新生成分界线… |
+| Clean Face / Nose Accent | 直线分界 / 突出鼻部 |
+| Neutral / Materials | 素模 / 原有材质 |
+| Flat mask | 黑白遮罩 |
+| Focus / Frame face | 放大视图 / 显示整个面部 |
+| Active point / Handles | 当前控制点 / 控制柄 |
+| Bake UV map | 烘焙用 UV |
+| Output packing | 输出通道 |
+| Generate & Finish | 导出并关闭 |
+| Source (region selection method) | 面部选取方式 |
 | Face coverage | 面部覆盖范围 |
 | Smoothing | 平滑强度 |
 
 Keep Anime SDF Gen, SDF, UV, RGB channels, PNG, EXR and keyboard shortcuts recognizable. Direction labels describe the existing boundary sweep; translations must not redefine channel or light-direction semantics.
+
+Write Chinese as native artist-facing copy, not as a word-for-word rendering of English. Labels describe the result; tooltips explain the action and its consequences. Use 形状 for list items, 曲线 for their contours, 控制点 for their points, 控制柄 for Bézier handles, 尖角 for the corner mode, and 工程 for saved projects. Explain each sweep as a group of keyframes; avoid 扫掠, 继承亮部, 头部空间 and 编辑会话 in everyday controls. Keep technical details when they help diagnose an error, after a plain-language explanation and any useful next step.
+
+Mirror copy must state that Left → Right is the source and Right → Left is replaced and locked. Lit-area copy must explain its effect on earlier keyframes. Refit copy must explain replacement of edited boundaries and possible shape loss when reducing frame counts. UV copy must distinguish selecting existing UV coordinates from selecting a texture image. Keep references to renamed controls consistent in tooltips, reports and the Chinese guide.
 
 ## Checks
 

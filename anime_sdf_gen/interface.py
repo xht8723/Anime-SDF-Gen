@@ -20,11 +20,16 @@ from .theme import (
     TEXT,
     MUTED,
     WARN,
+    PREVIOUS_CURVE,
+    NEXT_CURVE,
 )
 from .typography import measure, shorten, wrap, button_height
 from .i18n import iface, report
 from .core.messages import mark, msg, raw
 from .panels import Sidebar
+from .shelf import draw_shelf
+from .native_ui import SETTINGS_ACTIONS
+from .canvas import inside
 
 
 def icon(p, name, box, color, u):
@@ -121,6 +126,8 @@ def build(s, region):
         if s.busy
         else mark("Generate & Finish") if confirm else mark("Next Step  →")
     )
+    if s.stage == "FIT" and s.revisiting_setup:
+        primary_text = mark("Return to editing")
     bw = min(230 * u, w * 0.30)
     primary_x = w - 16 * u - bw
     back_x = primary_x - 46 * u
@@ -166,7 +173,8 @@ def build(s, region):
             continue
         x, y, vw, vh = e.boxes[name].box
         top = y + vh
-        p.rectangle(x, top - 56 * u, vw, 56 * u, PANEL)
+        header_height = (108 if s.stage == "EDIT" else 56) * u
+        p.rectangle(x, top - header_height, vw, header_height, PANEL)
         controls = 0
         if not setup:
             focus_x = x + vw - 12 * u if confirm else x + vw - 96 * u
@@ -221,6 +229,34 @@ def build(s, region):
                 MUTED,
                 max(0, vw - 18 * u - controls),
             )
+        if s.stage == "EDIT":
+            if name == "AUTHOR":
+                guide = (
+                    mark("Choose a middle keyframe, then drag a point to shape the shadow.")
+                    if s.key_index in (0, len(model.sweep(s.project, s.direction)) - 1)
+                    and len(model.sweep(s.project, s.direction)) > 2
+                    else mark("Drag points to shape the shadow. The preview updates as you edit.")
+                )
+                text(guide, x + 18 * u, top - 57 * u, 11, MUTED, vw - 36 * u)
+                text(mark("Default keys: Shift-click selects · G/R/S transforms · Ctrl+Z undoes"),
+                     x + 18 * u, top - 75 * u, 10, MUTED, vw - 36 * u)
+                text(mark("Previous frame guide"), x + 18 * u, top - 94 * u, 10,
+                     PREVIOUS_CURVE[:3] + (1,), vw / 2 - 24 * u)
+                text(mark("Next frame guide"), x + vw / 2, top - 94 * u, 10,
+                     NEXT_CURVE[:3] + (1,), vw / 2 - 18 * u)
+            else:
+                text(msg("Editing: {direction} · frame {index}",
+                         direction=msg(model.SWEEP_LABELS[s.direction]), index=s.key_index + 1),
+                     x + 18 * u, top - 60 * u, 11, TEXT, vw - 36 * u)
+                direction, nearest = s.direction, s.key_index
+                if s.orbit_preview:
+                    direction, progress = model.rotation_sample(s.rotation)
+                    frames = model.sweep(s.project, direction)
+                    nearest = min(range(len(frames)), key=lambda i: abs(frames[i]["progress"] - progress))
+                text(msg("Preview: {direction} · near frame {index} · {angle:.1f}°",
+                         direction=msg(model.SWEEP_LABELS[direction]), index=nearest + 1,
+                         angle=s.rotation),
+                     x + 18 * u, top - 81 * u, 11, ACCENT, vw - 36 * u)
     if "DIVIDER" in e.boxes:
         d = e.boxes["DIVIDER"]
         p.rectangle(d.x, d.y, d.width, d.height, BG)
@@ -240,16 +276,16 @@ def build(s, region):
     warning_lines = wrap(notice, cw - 12 * u) if notice else []
     footer = min(ph * 0.48, (len(warning_lines) * 18 + 78) * u) if warning_lines else 0
     footer = int(footer)
-    body = Rect(px, footer, pw, max(1, ph - footer))
+    body = Rect(px, py + footer, pw, max(1, ph - footer))
     e.boxes["PANEL_BODY"] = body
-    e.boxes["WARNING"] = Rect(px, 0, pw, footer)
+    e.boxes["WARNING"] = Rect(px, py, pw, footer)
     e.warning_bounds = e.boxes["WARNING"]
     old_scissor = gpu.state.scissor_get()
     gpu.state.scissor_test_set(True)
     gpu.state.scissor_set(*body.box)
     panel_start = len(e.widgets)
     scroll = max(0, e.panel_scroll)
-    y = ph - 29 * u + scroll
+    y = py + ph - 29 * u + scroll
     sidebar = Sidebar(s, text, button, p, e, x, cw, u, y)
     if confirm:
         sidebar.confirm()
@@ -262,13 +298,13 @@ def build(s, region):
         if setup:
             sidebar.navigation()
         else:
-            sidebar.edit()
+            sidebar.curves()
     y = sidebar.y
-    extent = (ph - 29 * u) - (y - scroll)
+    extent = (py + ph - 29 * u) - (y - scroll)
     e.panel_scroll_max = max(0, extent - body.height + 32 * u)
     e.panel_scroll = min(e.panel_scroll, e.panel_scroll_max)
     for widget in e.widgets[panel_start:]:
-        widget["clip"] = body.box
+        widget.setdefault("clip", body.box)
     if e.panel_scroll_max:
         thumb = max(24 * u, body.height * body.height / (body.height + e.panel_scroll_max))
         thumb_y = body.y + (body.height - thumb) * (1 - e.panel_scroll / e.panel_scroll_max)
@@ -276,18 +312,18 @@ def build(s, region):
     p.flush()
     gpu.state.scissor_set(px, py, pw, ph)
     if warning_lines:
-        card = (px + 12 * u, 12 * u, pw - 24 * u, footer - 18 * u)
+        card = (px + 12 * u, py + 12 * u, pw - 24 * u, footer - 18 * u)
         p.rectangle(*card, (0.15, 0.119, 0.111, 1), 8 * u, (0.30, 0.235, 0.20, 1), 0.7 * u)
-        text(mark("Needs attention"), x + 6 * u, footer - 30 * u, 12, WARN, cw - 38 * u)
+        text(mark("Needs attention"), x + 6 * u, py + footer - 30 * u, 12, WARN, cw - 38 * u)
         button(
             "DISMISS_ERROR",
             "",
-            (px + pw - 48 * u, footer - 38 * u, 24 * u, 24 * u),
+            (px + pw - 48 * u, py + footer - 38 * u, 24 * u, 24 * u),
             icon_name="CLOSE",
         )
         p.flush()
         message = Rect(
-            round(x + 6 * u), round(24 * u), round(cw - 12 * u), max(1, round(footer - 71 * u))
+            round(x + 6 * u), round(py + 24 * u), round(cw - 12 * u), max(1, round(footer - 71 * u))
         )
         e.boxes["WARNING_TEXT"] = message
         e.warning_scroll_max = max(0, len(warning_lines) * 18 * u - message.height)
@@ -321,79 +357,7 @@ def build(s, region):
     gpu.state.scissor_test_set(False)
 
     if not setup:
-        shelf = e.boxes["SHELF"]
-        sx, sy, sw, sh = shelf.box
-        p.rectangle(*shelf.box, BG)
-        direction, progress = model.rotation_sample(s.rotation)
-        if not confirm:
-            label_width = 145 * u
-            start_x = label_width + 16 * u
-            columns = max(2, int((sw - start_x - 16 * u) / (48 * u)))
-            max_count = max(len(model.sweep(s.project, d)) for d in model.SWEEP_LABELS)
-            s.keyframe_scroll = max(
-                0, min(getattr(s, "keyframe_scroll", 0), max(0, max_count - columns))
-            )
-            for row_index, (row_direction, title) in enumerate(model.SWEEP_LABELS.items()):
-                frames = model.sweep(s.project, row_direction)
-                start = min(s.keyframe_scroll, max(0, len(frames) - columns))
-                shown = list(enumerate(frames))[start : start + columns]
-                bw = (sw - start_x - 16 * u) / len(shown)
-                row_y = sh - (34 + 33 * row_index) * u
-                active = (direction if s.orbit_preview else s.direction) == row_direction
-                text(
-                    title,
-                    16 * u,
-                    row_y + 7 * u,
-                    13,
-                    ACCENT if active else MUTED,
-                    label_width - 8 * u,
-                )
-                nearest = min(
-                    range(len(frames)), key=lambda i: abs(frames[i]["progress"] - progress)
-                )
-                for column, (index, frame) in enumerate(shown):
-                    chosen = active and index == (nearest if s.orbit_preview else s.key_index)
-                    button(
-                        f"KEYFRAME:{row_direction}:{index}",
-                        str(index + 1),
-                        (start_x + column * bw, row_y, bw - 6 * u, 25 * u),
-                        chosen,
-                        not s.busy,
-                        size=12,
-                        center=True,
-                    )
-        text(
-            msg("Light rotation · {rotation:.0f}°", rotation=s.rotation), 16 * u, 67 * u, 12, MUTED
-        )
-        button(
-            "PLAY",
-            mark("Pause") if s.playing else mark("Play 360°"),
-            (16 * u, 32 * u, 95 * u, 26 * u),
-            enabled=not s.busy,
-            size=12,
-            center=True,
-        )
-        slider = (130 * u, 34 * u, max(1, sw - 152 * u), 22 * u)
-        e.boxes["SLIDER"] = slider
-        x, y, ww, hh = slider
-        p.rectangle(x, y + hh / 2 - u, ww, 2 * u, BORDER, u)
-        p.rectangle(
-            x + s.rotation / 360 * ww - 5 * u, y + hh / 2 - 5 * u, 10 * u, 10 * u, ACCENT, 5 * u
-        )
-        for fraction, caption in (
-            (0, mark("Front")),
-            (0.25, mark("Character left")),
-            (0.5, mark("Back")),
-            (0.75, mark("Character right")),
-            (1, mark("Front")),
-        ):
-            tx = x + fraction * ww
-            if fraction == 1:
-                tx -= measure(iface(caption), 10)
-            text(caption, tx, y - 13 * u, 10, MUTED, center=0 < fraction < 1)
-        if s.busy:
-            text(raw(report(s.export.message)), 16 * u, 7 * u, 11, MUTED, sw - 32 * u)
-        p.flush()
+        draw_shelf(s, text, button)
     draw_tooltip(s, region)
 
 
@@ -405,13 +369,10 @@ def draw_tooltip(s, region):
     widget = next((item for item in e.widgets if item["key"] == e.hover), None)
     if not widget:
         return
-    x, y, w, h = widget["box"]
-    mx, my = e.hover_pos
-
-    def inside(box):
-        return box[0] <= mx < box[0] + box[2] and box[1] <= my < box[1] + box[3]
-
-    if not inside(widget["box"]) or ("clip" in widget and not inside(widget["clip"])):
+    x, y, _, h = widget["box"]
+    if not inside(e.hover_pos, widget["box"]) or (
+        "clip" in widget and not inside(e.hover_pos, widget["clip"])
+    ):
         return
     u = scale()
     tip = widget["tooltip"]
@@ -448,15 +409,7 @@ def dispatch(s, key):
     if key.startswith("PACK:"):
         _, name, route = key.split(":")
         return ops.packing(map_name=name, route=route)
-    if key in (
-        "RESOLUTION",
-        "BIT_DEPTH",
-        "SMOOTHING",
-        "FILENAME",
-        "SOURCE",
-        "KEYFRAME_COUNT",
-        "POINT",
-    ):
+    if key in SETTINGS_ACTIONS:
         return ops.settings("INVOKE_DEFAULT", section=key)
     if key == "DESTINATION":
         return ops.destination("INVOKE_DEFAULT")
@@ -470,6 +423,8 @@ def dispatch(s, key):
         return ops.cancel_generation()
     if key == "TRANSFORM":
         return ops.transform("INVOKE_DEFAULT")
+    if key == "REFIT":
+        return ops.refit("INVOKE_DEFAULT")
     if key.startswith("NAV_"):
         return s.editor.navigation.command("AUTHOR", "view_axis", type=key[4:])
     if key == "DISMISS_ERROR":

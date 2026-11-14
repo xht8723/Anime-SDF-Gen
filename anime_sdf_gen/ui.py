@@ -108,7 +108,7 @@ class ANIME_SDF_GEN_Properties(bpy.types.PropertyGroup):
     )
 
 
-def report_error(operator, context, exc):
+def report_error(operator, exc):
     message = diagnostic(exc)
     i18n.launcher_notice = message
     if session.ACTIVE:
@@ -150,7 +150,7 @@ class ANIME_SDF_GEN_OT_create(bpy.types.Operator):
             i18n.launcher_notice = ""
             return {"FINISHED"}
         except Exception as exc:
-            return report_error(self, context, exc)
+            return report_error(self, exc)
 
 
 class ANIME_SDF_GEN_OT_keyframe(bpy.types.Operator):
@@ -167,7 +167,7 @@ class ANIME_SDF_GEN_OT_keyframe(bpy.types.Operator):
             s.select_keyframe(self.direction, self.index)
             return {"FINISHED"}
         except Exception as exc:
-            return report_error(self, context, exc)
+            return report_error(self, exc)
 
 
 class ANIME_SDF_GEN_OT_layer(bpy.types.Operator):
@@ -179,12 +179,11 @@ class ANIME_SDF_GEN_OT_layer(bpy.types.Operator):
         s = current(self, ("EDIT",))
         if s is None:
             return {"CANCELLED"}
-        if s:
-            s.contour = max(0, min(self.index, len(s.keyframe["contours"]) - 1))
-            s.point = 0
-            s.reset_selection(whole_curve=True)
-            s.sync_launcher()
-            s.redraw()
+        s.contour = max(0, min(self.index, len(s.keyframe["contours"]) - 1))
+        s.point = 0
+        s.reset_selection(whole_curve=True)
+        s.sync_launcher()
+        s.redraw()
         return {"FINISHED"}
 
 
@@ -201,7 +200,7 @@ class ANIME_SDF_GEN_OT_action(bpy.types.Operator):
             commands.action(s, self.action)
             return {"FINISHED"}
         except Exception as exc:
-            return report_error(self, context, exc)
+            return report_error(self, exc)
 
 
 class ANIME_SDF_GEN_OT_transform(bpy.types.Operator):
@@ -229,7 +228,7 @@ class ANIME_SDF_GEN_OT_transform(bpy.types.Operator):
             commands.transform(s, self.dx, self.dy, self.angle, self.scale)
             return {"FINISHED"}
         except Exception as exc:
-            return report_error(self, context, exc)
+            return report_error(self, exc)
 
 
 class ANIME_SDF_GEN_OT_settings(bpy.types.Operator):
@@ -237,6 +236,7 @@ class ANIME_SDF_GEN_OT_settings(bpy.types.Operator):
     bl_label = "Anime SDF Gen Settings"
     bl_description = "Edit the selected output, source, keyframe or point settings"
     section: StringProperty(default="RESOLUTION", options={"HIDDEN"})
+    shape_name: StringProperty(name="Shape name", maxlen=80, translation_context=CONTEXT)
     filename: StringProperty(
         name="File name",
         description="Base name shared by the textures and editable project",
@@ -261,7 +261,7 @@ class ANIME_SDF_GEN_OT_settings(bpy.types.Operator):
         update=smoothing_dialog_changed,
         translation_context=CONTEXT,
     )
-    uv_map: StringProperty(name="Output UV map", translation_context=CONTEXT)
+    uv_map: StringProperty(name="Bake UV map", translation_context=CONTEXT)
     front_only: BoolProperty(name="Frontal surface only", default=True, translation_context=CONTEXT)
     keyframes: IntProperty(
         name="Shadow keyframes",
@@ -299,7 +299,7 @@ class ANIME_SDF_GEN_OT_settings(bpy.types.Operator):
         s = current(self)
         if s is None:
             return {"CANCELLED"}
-        bind(self, s, target=self.section == "POINT")
+        bind(self, s, target=self.section in ("POINT", "SHAPE_NAME"))
         self.preview_ready = False
         settings = s.project["settings"]
         authoring = s.project["authoring"]
@@ -316,6 +316,7 @@ class ANIME_SDF_GEN_OT_settings(bpy.types.Operator):
         self.handle_left = pt["left"]
         self.handle_right = pt["right"]
         self.filename = Path(bpy.path.abspath(settings["output"])).name
+        self.shape_name = s.curve["name"]
         self.preview_ready = True
         return context.window_manager.invoke_props_dialog(self, width=390)
 
@@ -324,7 +325,9 @@ class ANIME_SDF_GEN_OT_settings(bpy.types.Operator):
         s = session.ACTIVE
         if not s:
             return
-        if self.section == "RESOLUTION":
+        if self.section == "SHAPE_NAME":
+            layout.prop(self, "shape_name")
+        elif self.section == "RESOLUTION":
             layout.prop(self, "resolution")
         elif self.section == "BIT_DEPTH":
             layout.prop(self, "bit_depth", expand=True)
@@ -332,6 +335,10 @@ class ANIME_SDF_GEN_OT_settings(bpy.types.Operator):
             layout.prop(self, "smoothing", slider=True)
         elif self.section == "FILENAME":
             layout.prop(self, "filename")
+        elif self.section == "BAKE_UV":
+            obj = bpy.data.objects.get(s.project["source"]["object"])
+            if obj:
+                layout.prop_search(self, "uv_map", obj.data, "uv_layers")
         elif self.section == "SOURCE":
             layout.label(
                 text=iface(msg("Source: {name}", name=s.project["source"]["object"])),
@@ -350,7 +357,7 @@ class ANIME_SDF_GEN_OT_settings(bpy.types.Operator):
             row.prop(self, "front_only")
             if s.stage != "ORIENT":
                 layout.label(
-                    text=iface("Change orientation to choose a different UV map."), translate=False
+                    text=iface("Choose the bake UV map in Orientation or Confirm."), translate=False
                 )
         elif self.section == "KEYFRAME_COUNT":
             layout.prop(self, "keyframes")
@@ -364,22 +371,28 @@ class ANIME_SDF_GEN_OT_settings(bpy.types.Operator):
     def execute(self, context):
         allowed = {
             "POINT": ("EDIT",),
+            "SHAPE_NAME": ("EDIT",),
             "KEYFRAME_COUNT": ("ORIENT", "FIT"),
             "RESOLUTION": ("CONFIRM",),
             "BIT_DEPTH": ("CONFIRM",),
             "SMOOTHING": ("CONFIRM",),
             "FILENAME": ("CONFIRM",),
+            "BAKE_UV": ("CONFIRM",),
         }
         s = current(self, allowed.get(self.section))
         if s is None:
             return {"CANCELLED"}
         try:
-            if self.section == "POINT":
+            if self.section == "SHAPE_NAME":
+                commands.rename_shape(s, self.shape_name)
+            elif self.section == "POINT":
                 commands.point(
                     s, self.point_xy, self.handle_mode, self.handle_left, self.handle_right
                 )
             elif self.section == "SMOOTHING":
                 s.preview.set_smoothing(self.smoothing)
+            elif self.section == "BAKE_UV":
+                s.set_bake_uv(self.uv_map)
             else:
                 with s.edit(history=self.section == "KEYFRAME_COUNT", invalidate=False):
                     if self.section == "RESOLUTION":
@@ -412,12 +425,40 @@ class ANIME_SDF_GEN_OT_settings(bpy.types.Operator):
                         )
             return {"FINISHED"}
         except Exception as exc:
-            return report_error(self, context, exc)
+            return report_error(self, exc)
 
     def cancel(self, context):
         s = current(self, ("CONFIRM",))
         if self.section == "SMOOTHING" and s:
             s.preview.set_smoothing(self.initial_smoothing)
+
+
+class ANIME_SDF_GEN_OT_refit(bpy.types.Operator):
+    bl_idname = "anime_sdf_gen.refit"
+    bl_label = "Refit Boundaries"
+    bl_description = "Replace main boundaries using the markers, preset and keyframe count"
+
+    def invoke(self, context, event):
+        s = current(self, ("FIT",))
+        if s is None or not s.revisiting_setup:
+            return {"CANCELLED"}
+        bind(self, s, snapshot=True)
+        return context.window_manager.invoke_confirm(
+            self, event,
+            title=iface("Replace edited main boundaries?"),
+            message=iface("Refitting replaces main boundaries and copies shapes from nearby frames. Reducing the frame count can omit shapes. You can undo this change."),
+            confirm_text=iface("Refit & Edit"),
+        )
+
+    def execute(self, context):
+        s = current(self, ("FIT",))
+        if s is None or not s.revisiting_setup:
+            return {"CANCELLED"}
+        try:
+            s.fit(s.project["authoring"]["keyframe_count"])
+            return {"FINISHED"}
+        except Exception as exc:
+            return report_error(self, exc)
 
 
 class ANIME_SDF_GEN_OT_packing(bpy.types.Operator):
@@ -445,7 +486,7 @@ class ANIME_SDF_GEN_OT_packing(bpy.types.Operator):
                 model.set_packing(s.project, self.map_name, self.route)
             return {"FINISHED"}
         except Exception as exc:
-            return report_error(self, context, exc)
+            return report_error(self, exc)
 
 
 class ANIME_SDF_GEN_OT_destination(bpy.types.Operator, ExportHelper):
@@ -477,12 +518,12 @@ class ANIME_SDF_GEN_OT_destination(bpy.types.Operator, ExportHelper):
         return ExportHelper.invoke(self, context, event)
 
     def execute(self, context):
-        s = session.ACTIVE
-        if current(self, ("CONFIRM",)) is None:
+        s = current(self, ("CONFIRM",))
+        if s is None:
             return {"CANCELLED"}
         path = bpy.path.abspath(self.filepath)
         if not path.strip():
-            return report_error(self, context, UserError("Choose a save location."))
+            return report_error(self, UserError("Choose a save location."))
         if path.lower().endswith((".png", ".exr")):
             path = path[:-4]
         with s.edit(history=False, invalidate=False):
@@ -496,12 +537,12 @@ class ANIME_SDF_GEN_OT_landmark(bpy.types.Operator):
     name: StringProperty(default="nose")
 
     def execute(self, context):
-        if current(self, ("FIT",)) is None:
+        s = current(self, ("FIT",))
+        if s is None:
             return {"CANCELLED"}
-        if session.ACTIVE:
-            session.ACTIVE.landmark = self.name
-            session.ACTIVE.sync_launcher()
-            session.ACTIVE.redraw()
+        s.landmark = self.name
+        s.sync_launcher()
+        s.redraw()
         return {"FINISHED"}
 
 
@@ -517,22 +558,21 @@ class ANIME_SDF_GEN_OT_generate(bpy.types.Operator):
         if s is None:
             return {"CANCELLED"}
         bind(self, s, snapshot=True)
-        if s:
-            base = bpy.path.abspath(s.project["settings"]["output"])
-            try:
-                existing = any(path.exists() for path in output_paths(s.project, base))
-            except Exception as exc:
-                return report_error(self, context, exc)
-            if existing:
-                return context.window_manager.invoke_confirm(
-                    self,
-                    event,
-                    title=iface("Replace existing SDF output?"),
-                    message=iface(
-                        "Existing files in this output set will be replaced together after verification."
-                    ),
-                    confirm_text=iface("Replace & Generate"),
-                )
+        base = bpy.path.abspath(s.project["settings"]["output"])
+        try:
+            existing = any(path.exists() for path in output_paths(s.project, base))
+        except Exception as exc:
+            return report_error(self, exc)
+        if existing:
+            return context.window_manager.invoke_confirm(
+                self,
+                event,
+                title=iface("Replace existing SDF output?"),
+                message=iface(
+                    "Existing files in this output set will be replaced together after verification."
+                ),
+                confirm_text=iface("Replace & Generate"),
+            )
         return self.execute(context)
 
     def execute(self, context):
@@ -543,7 +583,7 @@ class ANIME_SDF_GEN_OT_generate(bpy.types.Operator):
             s.export.start()
             return {"FINISHED"}
         except Exception as exc:
-            return report_error(self, context, exc)
+            return report_error(self, exc)
 
 
 class ANIME_SDF_GEN_OT_cancel_generation(bpy.types.Operator):
@@ -583,26 +623,24 @@ class ANIME_SDF_GEN_OT_save_draft(bpy.types.Operator, ExportHelper):
         return ExportHelper.invoke(self, context, event)
 
     def execute(self, context):
-        if current(self) is None:
+        s = current(self)
+        if s is None:
             return {"CANCELLED"}
         try:
-            if session.ACTIVE:
-                atomic_text(self.filepath, model.dumps(session.ACTIVE.project))
-                try:
-                    automatic = session.draft_root() / (
-                        session.ACTIVE.project["id"] + ".sdfproject.json"
-                    )
-                    remove_draft = Path(self.filepath).resolve() != automatic.resolve()
-                except OSError:
-                    remove_draft = True
-                if session.ACTIVE.editor:
-                    session.ACTIVE.close_requested = remove_draft
-                else:
-                    session.end_session(remove_draft=remove_draft)
+            atomic_text(self.filepath, model.dumps(s.project))
+            try:
+                automatic = session.draft_root() / (s.project["id"] + ".sdfproject.json")
+                remove_draft = Path(self.filepath).resolve() != automatic.resolve()
+            except OSError:
+                remove_draft = True
+            if s.editor:
+                s.close_requested = remove_draft
+            else:
+                session.end_session(remove_draft=remove_draft)
             self.report({"INFO"}, report("Draft saved; original workspace restored."))
             return {"FINISHED"}
         except Exception as exc:
-            return report_error(self, context, exc)
+            return report_error(self, exc)
 
 
 class ANIME_SDF_GEN_OT_open(bpy.types.Operator, ImportHelper):
@@ -629,15 +667,16 @@ class ANIME_SDF_GEN_OT_open(bpy.types.Operator, ImportHelper):
                 obj = context.view_layer.objects.active
                 f = source.capture(obj, props.source_method, props.vertex_group)
                 p["source"], p["alignment"] = f.reference, f.alignment
-                p["authoring"].update(stage="ORIENT", anchors={}, uv_map=f.reference["uv_map"])
+                p["authoring"].update(stage="REORIENT", anchors={}, uv_map=f.reference["uv_map"])
             else:
                 f = source.from_reference(
-                    p["source"], p["alignment"], validate=p["authoring"]["stage"] != "ORIENT"
+                    p["source"], p["alignment"],
+                    validate=p["authoring"]["stage"] not in ("ORIENT", "REORIENT"),
                 )
             session.start(context, p, f)
             return {"FINISHED"}
         except Exception as exc:
-            return report_error(self, context, exc)
+            return report_error(self, exc)
 
 
 class ANIME_SDF_GEN_OT_recover(bpy.types.Operator):
@@ -656,7 +695,7 @@ class ANIME_SDF_GEN_OT_recover(bpy.types.Operator):
                 raise UserError("No recovery drafts are available.")
             return bpy.ops.anime_sdf_gen.open_project(filepath=str(drafts[0]))
         except Exception as exc:
-            return report_error(self, context, exc)
+            return report_error(self, exc)
 
 
 def wrapped(layout, text, width=44, icon=None, translate=True):
@@ -685,6 +724,22 @@ class ANIME_SDF_GEN_PT_launcher(bpy.types.Panel):
         layout = self.layout
         p = context.window_manager.anime_sdf_gen
         s = session.ACTIVE
+        if session.LAST_EXPORT:
+            paths = session.LAST_EXPORT
+            box = layout.box()
+            box.label(text=iface("Export complete"), icon="CHECKMARK", translate=False)
+            wrapped(box, msg("Saved {count} files", count=len(paths)))
+            wrapped(box, str(Path(paths[-1]).parent), translate=False)
+            folder = box.operator("wm.path_open", text=iface("Open output folder"), icon="FILE_FOLDER")
+            folder.filepath = str(Path(paths[-1]).parent)
+            row = box.row()
+            row.enabled = s is None
+            row.operator_context = "EXEC_DEFAULT"
+            reopen = row.operator("anime_sdf_gen.open_project", text=iface("Reopen project"), icon="FILE_REFRESH")
+            reopen.filepath = paths[-1]
+            wrapped(box, "Load the textures as Non-Color data in your character shader.")
+            guide = box.operator("wm.url_open", text=iface("Shader setup guide"), icon="HELP")
+            guide.url = "https://github.com/xht8723/Anime-SDF-Gen/blob/main/output-format.md"
         if s:
             wrapped(layout, "Your authoring session is in the Anime SDF Gen popup.", icon="WINDOW")
             return
@@ -721,6 +776,7 @@ CLASSES = (
     ANIME_SDF_GEN_OT_action,
     ANIME_SDF_GEN_OT_transform,
     ANIME_SDF_GEN_OT_settings,
+    ANIME_SDF_GEN_OT_refit,
     ANIME_SDF_GEN_OT_packing,
     ANIME_SDF_GEN_OT_destination,
     ANIME_SDF_GEN_OT_landmark,

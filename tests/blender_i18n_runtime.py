@@ -15,7 +15,7 @@ import anime_sdf_gen
 from anime_sdf_gen import i18n, ui, source
 from anime_sdf_gen.catalog import ENTRIES
 from anime_sdf_gen.core import model, files
-from anime_sdf_gen.core.messages import CONTEXT, msg, raw, UserError
+from anime_sdf_gen.core.messages import CONTEXT, msg, raw
 from tests.support import TestRun
 
 RUN = TestRun("i18n-runtime").prepare(blender=True)
@@ -95,7 +95,7 @@ try:
         v.use_translate_reports = reports
         assert i18n.iface("Smoothing") == ("平滑强度" if interface else "Smoothing")
         assert i18n.tip("Smoothing") == ("平滑强度" if tips else "Smoothing")
-        expected = "源模型没有名为 Smoothing {UV} 的 UV 贴图。" if reports else str(message)
+        expected = "源模型没有名为 Smoothing {UV} 的 UV。" if reports else str(message)
         assert i18n.report(message) == expected
         assert i18n.iface(raw("Smoothing")) == "Smoothing"
         notifications = []

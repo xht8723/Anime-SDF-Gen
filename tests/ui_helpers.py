@@ -4,7 +4,7 @@ import time
 import bpy
 import numpy as np
 from anime_sdf_gen import session
-from anime_sdf_gen.viewport import window_region
+from anime_sdf_gen.viewport import window_region, scale
 
 
 def redraw():
@@ -130,3 +130,24 @@ def wait_for(predicate, timeout=20):
     while not predicate():
         assert time.perf_counter() < deadline, "Timed out waiting for UI state"
         yield 0.1
+
+
+def dialog_confirm_position(output, name):
+    """Find Blender's blue confirmation button in a real rendered dialog."""
+    shot(output, name + ".png")
+    image = bpy.data.images.load(str(output / (name + ".png")), check_existing=False)
+    try:
+        image.colorspace_settings.name = "Non-Color"
+        pixels = np.empty(image.size[0] * image.size[1] * 4, np.float32)
+        image.pixels.foreach_get(pixels)
+        rgb = pixels.reshape(image.size[1], image.size[0], 4)[..., :3]
+        mask = ((rgb[..., 2] > 0.6) & (rgb[..., 2] - rgb[..., 1] > 0.15)
+                & (rgb[..., 1] - rgb[..., 0] > 0.1))
+        counts = mask.sum(axis=1)
+        ys = np.flatnonzero(counts > counts.max() * 0.9)
+        assert counts.max() > 80 * scale(), (name, counts.max())
+        xs = np.flatnonzero(mask[ys[len(ys) // 2]])
+        native = window_region(session.ACTIVE.editor.native_area)
+        return np.array([xs.mean() - native.x, ys.mean() - native.y])
+    finally:
+        bpy.data.images.remove(image)

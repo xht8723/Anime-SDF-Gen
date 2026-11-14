@@ -19,11 +19,13 @@ from .preview import Preview
 from .export import ExportJob
 from .commands import EditTransaction
 from .editor import Editor
+from .native_ui import NativeUI
 from .canvas import flat_contour
 from mathutils.bvhtree import BVHTree
 
 ACTIVE = None
 SUSPENDED = None
+LAST_EXPORT = None
 
 
 def draft_root():
@@ -61,12 +63,17 @@ class Session:
         self.preview_object = self.scene = None
         self._timer = self.tick
         self._modal_running = False
+        self._event_timer = None
+        self._draw_error = None
+        self.frame_times = []
+        self.keyframe_scroll = 0
         self.editor = None
         self.layout_state = layout
         self.bvh = None
         self._material_copies = {}
+        self.native_ui = NativeUI(self)
         self.preview = Preview(self)
-        self.export = ExportJob(self, lambda: end_session(remove_draft=True))
+        self.export = ExportJob(self, self.finish_export)
         self.refresh_projection()
 
     @property
@@ -75,7 +82,22 @@ class Session:
 
     @property
     def stage(self):
-        return self.project["authoring"]["stage"]
+        # Revisit states persist the safe return route through drafts and undo.
+        stage = self.project["authoring"]["stage"]
+        return {"REORIENT": "ORIENT", "REFIT": "FIT"}.get(stage, stage)
+
+    @property
+    def revisiting_setup(self):
+        return self.project["authoring"]["stage"] in ("REORIENT", "REFIT")
+
+    def finish_export(self):
+        global LAST_EXPORT
+        # These paths come from the committed export snapshot, not live settings.
+        LAST_EXPORT = tuple(self.export.paths)
+        end_session(remove_draft=True)
+        for window in bpy.context.window_manager.windows:
+            for area in window.screen.areas:
+                area.tag_redraw()
 
     def refresh_projection(self):
         face = self.face
@@ -150,15 +172,15 @@ class Session:
             p.use_smooth = True
         for layer in list(mesh.uv_layers):
             mesh.uv_layers.remove(layer)
-        for name, coords in (
-            self.face.uv_layers or {self.face.reference["uv_map"]: self.face.uvs}
-        ).items():
+        for name, coords in self.face.uv_layers.items():
             layer = mesh.uv_layers.new(name=name)
             layer.data.foreach_set("uv", coords.astype(np.float32).ravel())
-        if self.face.reference["uv_map"] in mesh.uv_layers:
-            mesh.uv_layers.active = mesh.uv_layers[self.face.reference["uv_map"]]
+        if self.face.active_uv in mesh.uv_layers:
+            mesh.uv_layers.active = mesh.uv_layers[self.face.active_uv]
+        if self.face.render_uv in mesh.uv_layers:
+            mesh.uv_layers[self.face.render_uv].active_render = True
         mesh.materials.clear()
-        for original in self.face.materials or []:
+        for original in self.face.materials:
             key = original.as_pointer() if original else 0
             if key not in self._material_copies:
                 mat = (
@@ -166,8 +188,7 @@ class Session:
                 )
                 self._material_copies[key] = self.registry.own("materials", mat)
             mesh.materials.append(self._material_copies[key])
-        if self.face.material_indices is not None:
-            mesh.polygons.foreach_set("material_index", self.face.material_indices)
+        mesh.polygons.foreach_set("material_index", self.face.material_indices)
         self.preview._face_batch = None
 
     def frame_view(self):
@@ -176,6 +197,7 @@ class Session:
 
     def set_front(self, rotation=None):
         with self.edit(invalidate=False, stages=("ORIENT",)):
+            next_stage = "REFIT" if self.revisiting_setup else "FIT"
             if self.editor:
                 self.editor.navigation.stop()
             if rotation is None:
@@ -186,13 +208,13 @@ class Session:
                 self.face.vertices, rotation @ Vector((0, 0, 1)), rotation @ Vector((0, 1, 0))
             )
             ref = deepcopy(self.project["source"])
-            ref["uv_map"] = self.project["authoring"]["uv_map"] or ref["uv_map"]
+            ref["uv_map"] = self.project["authoring"]["uv_map"]
             ref["front_only"] = self.project["authoring"]["front_only"]
             with self.origin.override():
                 face = source.from_reference(ref, a, allow_relink=True)
             self.face = face
             self.project["source"], self.project["alignment"] = face.reference, a
-            self.project["authoring"].update(stage="FIT", anchors={})
+            self.project["authoring"].update(stage=next_stage, anchors={})
             self.project["landmarks"] = deepcopy(model.DEFAULT_LANDMARKS)
             self.refresh_projection()
             self.populate_reference()
@@ -210,16 +232,16 @@ class Session:
         if not len(covered):
             raise UserError("No visible face surface for fitting markers.")
         supported = (covered[:, ::-1] + 0.5) * model.SPAN / self.size - model.PAD
-        for name, default in model.DEFAULT_LANDMARKS.items():
+        for name in model.DEFAULT_LANDMARKS:
             if name in self.project["authoring"]["anchors"]:
                 continue
-            target = np.asarray(self.project["landmarks"].get(name, default))
+            target = np.asarray(self.project["landmarks"][name])
             # Try the intended point first, then the nearest covered pixel
             # centers when a facial opening leaves a hole under that point.
             nearest = np.argsort(np.sum((supported - target) ** 2, axis=1), kind="stable")[:32]
             for xy in [target, *supported[nearest]]:
                 origin = source.world_point(a, xy, start_depth)
-                hit, normal, index, distance = self.bvh.ray_cast(origin, direction)
+                hit, _, index, _ = self.bvh.ray_cast(origin, direction)
                 if hit is not None and self.place_landmark(hit, index, name):
                     break
             else:
@@ -234,7 +256,7 @@ class Session:
 
     def pick_landmark(self, view, mouse, name=None):
         origin, direction = view.ray(mouse)
-        hit, normal, index, distance = self.bvh.ray_cast(origin, direction)
+        hit, _, index, _ = self.bvh.ray_cast(origin, direction)
         if hit is None:
             self.notify_error("Click on the visible face to place a marker. No surface was hit.")
             return False
@@ -287,6 +309,15 @@ class Session:
             self.changed()
             self.activate_stage()
 
+    def continue_fitting(self):
+        self.require_edit(("FIT",))
+        if not self.revisiting_setup:
+            self.fit(self.project["authoring"]["keyframe_count"])
+            return
+        with self.edit(invalidate=False, stages=("FIT",)):
+            self.project["authoring"]["stage"] = "EDIT"
+            self.activate_stage()
+
     def activate_stage(self):
         """Initialize a step without refitting curves or invalidating cached fields."""
         self.playing = self.orbit_preview = False
@@ -312,14 +343,42 @@ class Session:
         self.project["authoring"]["stage"] = "CONFIRM"
         self.activate_stage()
 
+    def set_bake_uv(self, name):
+        self.require_edit(("CONFIRM",))
+        if name == self.project["source"]["uv_map"]:
+            return
+        ref = deepcopy(self.project["source"])
+        ref["uv_map"] = name
+        with self.origin.override():
+            face = source.from_reference(ref, self.project["alignment"], allow_relink=True)
+        if face.reference["faces"] != self.face.reference["faces"] or any(
+            not np.array_equal(getattr(face, field), getattr(self.face, field))
+            for field in ("vertices", "triangles", "triangle_vertices", "projected")
+        ):
+            raise UserError(
+                "The source geometry, pose, or face region changed. Relink the source before changing the bake UV map."
+            )
+        # Validation above cannot disturb artwork, playback or preview caches.
+        # UV switching is an output setting, not a refit or a geometry edit.
+        with self.edit(history=False, invalidate=False, stages=("CONFIRM",)):
+            self.face = face
+            self.project["source"] = deepcopy(face.reference)
+            self.project["authoring"]["uv_map"] = name
+
     def restore_project(self, project):
         previous_stage = self.stage
+        mirrored_progress = (
+            self.keyframe["progress"]
+            if project["mirror_sweeps"] and self.direction == model.RTL
+            else None
+        )
         self.preview.cancel()
         changed_geometry = (
             project["alignment"] != self.project["alignment"]
             or project["source"] != self.project["source"]
         )
         self.project = project
+        self.normalize_selection(mirrored_progress)
         if changed_geometry:
             with self.origin.override():
                 self.face = source.from_reference(
@@ -332,13 +391,22 @@ class Session:
             self.activate_stage()
 
     def canonicalize_edit(self):
-        model.synchronize_mirror(self.project, self.direction)
+        model.synchronize_mirror(self.project)
 
-    def normalize_selection(self):
+    def normalize_selection(self, mirrored_progress=None):
         self.direction = self.direction if self.direction in model.SWEEP_LABELS else model.LTR
         self.key_index = max(
             0, min(self.key_index, len(model.sweep(self.project, self.direction)) - 1)
         )
+        if self.project["mirror_sweeps"] and self.direction == model.RTL:
+            progress = self.keyframe["progress"] if mirrored_progress is None else mirrored_progress
+            self.direction = model.LTR
+            frames = model.sweep(self.project, model.LTR)
+            self.key_index = min(
+                range(len(frames)), key=lambda i: abs(frames[i]["progress"] - progress)
+            )
+            self.contour = self.point = 0
+            self.reset_selection()
         frame = model.get_keyframe(self.project, self.direction, self.key_index)
         self.contour = max(0, min(self.contour, len(frame["contours"]) - 1))
         self.point = max(0, min(self.point, len(frame["contours"][self.contour]["points"]) - 1))
@@ -418,6 +486,7 @@ class Session:
             model.sweep(self.project, direction)
         ):
             raise UserError("Choose an existing keyframe in a sweep row.")
+        model.require_editable_sweep(self.project, direction)
         self.playing = self.orbit_preview = False
         self.direction, self.key_index = direction, index
         self.contour, self.point, self.handle = 0, 0, "co"
@@ -440,6 +509,7 @@ class Session:
             raise UserError("This session is closed or generation is running.")
         if stages is not None and self.stage not in stages:
             raise UserError("This action is unavailable in the current step.")
+        model.require_editable_sweep(self.project, self.direction)
 
     def edit(self, history=True, invalidate=True, stages=None):
         return EditTransaction(self, history, invalidate, stages)
@@ -498,6 +568,9 @@ class Session:
                 self.editor.navigation.poll()
                 self.editor.lock_author()
                 self.editor.tick_tooltip(now)
+                self.native_ui.advance()
+                if self.closed:
+                    return None
             if self.draft_due and now >= self.draft_due:
                 self.safe_write_draft()
                 self.draft_due = 0
@@ -522,12 +595,13 @@ class Session:
         if self.closed:
             return
         self.cancel_curve_edit()
+        self.native_ui.cancel()
         self.closed, self.playing = True, False
         self.preview.cancel()
         self.export.close()
         if bpy.app.timers.is_registered(self._timer):
             bpy.app.timers.unregister(self._timer)
-        if getattr(self, "_event_timer", None):
+        if self._event_timer:
             try:
                 bpy.context.window_manager.event_timer_remove(self._event_timer)
             except ReferenceError:
@@ -613,11 +687,12 @@ def resume():
             window = next(iter(bpy.context.window_manager.windows), None)
         kwargs = {"window": window} if window else {}
         with bpy.context.temp_override(**kwargs):
-            s = start(bpy.context, data["project"], data["face"], layout=data.get("layout"))
+            s = start(bpy.context, data["project"], data["face"], layout=data["layout"])
             s.history = data["history"]
-            s.select_keyframe(data["direction"], data["key_index"])
-            for k, value in data.get("editor", {}).items():
+            s.direction, s.key_index = data["direction"], data["key_index"]
+            for k, value in data["editor"].items():
                 setattr(s, k, value)
+            s.normalize_selection()
             s.preview.render()
             s.sync_launcher()
     except Exception:

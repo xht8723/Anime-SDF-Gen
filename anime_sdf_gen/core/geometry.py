@@ -15,36 +15,12 @@ def area(tris):
     return cross2(tris[:, 1] - tris[:, 0], tris[:, 2] - tris[:, 0])
 
 
-def _intersection_area(a, b):
-    poly = list(a)
-    sign = 1 if cross2(b[1] - b[0], b[2] - b[0]) > 0 else -1
-    for j in range(3):
-        edge0, edge1 = b[j], b[(j + 1) % 3]
-        out = []
-        if not poly:
-            return 0.0
-        prev = poly[-1]
-        pd = float(cross2(edge1 - edge0, prev - edge0)) * sign
-        for cur in poly:
-            cd = float(cross2(edge1 - edge0, cur - edge0)) * sign
-            if (cd >= 0) != (pd >= 0):
-                out.append(prev + (cur - prev) * (pd / (pd - cd)))
-            if cd >= 0:
-                out.append(cur)
-            prev, pd = cur, cd
-        poly = out
-    if len(poly) < 3:
-        return 0.0
-    p = np.asarray(poly)
-    return abs(float(np.sum(cross2(p, np.roll(p, -1, axis=0))))) * 0.5
-
-
 def validate_uv(uvs, positions=None):
     uvs = np.asarray(uvs, dtype=float)
     if not len(uvs) or not np.isfinite(uvs).all():
         raise UserError("The face has no finite UV triangles.")
     if uvs.min() < -1e-6 or uvs.max() > 1 + 1e-6:
-        raise UserError("V1 requires the selected face UVs inside a single 0–1 tile.")
+        raise UserError("The selected face UVs must be inside a single 0–1 tile.")
     bad = np.flatnonzero(np.abs(area(uvs)) < 1e-12)
     if len(bad):
         raise UserError(
@@ -59,28 +35,6 @@ def validate_uv(uvs, positions=None):
         extent = float(np.max(np.ptp(positions.reshape(-1, 3), axis=0)))
         if extent == 0 or np.any(physical <= extent * extent * 1e-14):
             raise UserError("The selected region contains degenerate mesh triangles.")
-    lo, hi = uvs.min(axis=1), uvs.max(axis=1)
-    bins = {}
-    for i in range(len(uvs)):
-        low, high = np.floor(lo[i] * 64).astype(int).clip(0, 63), np.floor(hi[i] * 64).astype(
-            int
-        ).clip(0, 63)
-        candidates = set()
-        for y in range(low[1], high[1] + 1):
-            for x in range(low[0], high[0] + 1):
-                candidates.update(bins.get((x, y), ()))
-        for j in candidates:
-            if np.any(np.minimum(hi[i], hi[j]) - np.maximum(lo[i], lo[j]) <= 1e-10):
-                continue
-            if _intersection_area(uvs[i], uvs[j]) > 1e-12:
-                raise UserError(
-                    "Overlapping face UV triangles {first} and {second}. Choose a unique face UV map; shadow symmetry does not resolve shared texels.",
-                    first=j,
-                    second=i,
-                )
-        for y in range(low[1], high[1] + 1):
-            for x in range(low[0], high[0] + 1):
-                bins.setdefault((x, y), []).append(i)
 
 
 def triangle_pixels(tri, size):
@@ -152,7 +106,6 @@ def bake_steps(thresholds, uvs, projected, depth, facing, size):
 
 def pad_steps(image, radius):
     """Nearest-seed dilation; B remains the original face coverage, without a halo."""
-    size = image.shape[0]
     valid = image[..., 2] > 0.5
     sy, sx = np.indices(valid.shape, dtype=np.int32)
     seed_x, seed_y = np.where(valid, sx, -1), np.where(valid, sy, -1)

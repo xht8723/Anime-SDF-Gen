@@ -142,7 +142,7 @@ def workflow():
     assert action("action", action="REMOVE_KEYFRAME") == {"CANCELLED"}
     assert model.dumps(s.project) == saved and s.error
     redraw()
-    assert e.warning_bounds.y == 0
+    assert e.warning_bounds.y == e.boxes["PANEL"].y
     click("DISMISS_ERROR")
     yield 0.15
     click("KEYFRAME:right_to_left:4")
@@ -235,7 +235,7 @@ def workflow():
     yield from wait_for(lambda: s.preview.thresholds is not None or bool(s.error))
     assert not s.error and s.seam_warning and "Back" in str(s.seam_warning), s.error
     redraw()
-    assert e.warning_bounds.y == 0
+    assert e.warning_bounds.y == e.boxes["PANEL"].y
     shot(OUT, "04-endpoint-seam-warning.png")
     click("DELETE_SHAPE")
     yield 0.15

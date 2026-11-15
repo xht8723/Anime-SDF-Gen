@@ -107,8 +107,8 @@ def contour_lines(s, c, region, view, color, width=1):
 def pick(s, mouse, view):
     candidates = []
     if s.stage == "FIT":
-        for name, anchor in s.project["authoring"]["anchors"].items():
-            q = view.project(anchor["world"])
+        for name in s.project["landmarks"]:
+            q = view.project(s.landmark_world(name))
             if q is not None:
                 candidates.append((np.linalg.norm(np.array(q) - mouse), ("landmark", name)))
     else:

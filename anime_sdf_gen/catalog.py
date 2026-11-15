@@ -4,6 +4,15 @@ Keep entries explicit for review, duplicate detection and placeholder checks.
 """
 
 ENTRIES = (
+    ("0 texels baked. The output contains no face coverage.", "没有烘焙到任何像素，输出的面部覆盖范围为空。"),
+    ("Choose a UV map…", "选择烘焙用 UV…"),
+    ("Choose an existing UV map before exporting. Drawing and saving remain available.", "导出前请选择模型已有的 UV。现在仍可绘制和保存草稿。"),
+    ("Choose a bake UV map before exporting.", "请先选择烘焙用 UV，再导出。"),
+    ("Restrict shadows to front-visible surfaces. Off includes all selected geometry; On can exclude cheeks, underside and hidden surfaces.", "关闭时，所选区域的所有表面都会接收阴影投影。开启后仅处理从正面可见的表面，可能排除脸颊边缘、下方和被遮挡的部位。"),
+    ("The bake UV map contains invalid coordinates.", "烘焙用 UV 中存在无效数值，请检查坐标。"),
+    ("The face alignment contains invalid coordinates.", "面部朝向或尺寸中存在无效数值，请重新设置朝向。"),
+    ("The source geometry contains invalid coordinates.", "源模型的顶点坐标中存在无效数值。"),
+    ("Drag this fitting guide freely. It snaps to the mesh, or stays on the drawing plane when no surface is hit.", "可自由拖动这个参考点来调整初始曲线。拖到模型上时吸附表面，拖到空白处时落在绘图平面上。"),
     ('Selected shape: {name}', "当前形状：{name}"),
     ('The main boundary is always kept. Edit its points below or in the view.', "明暗分界线不能删除。可在视图中拖动控制点，也可在下方输入数值调整。"),
 
@@ -81,7 +90,6 @@ ENTRIES = (
     ("Base name shared by the textures and editable project", "纹理和工程文件共用的名称前缀"),
     ("Cancel Generation", "取消生成"),
     ("Cancel generation", "取消生成"),
-    ("Cannot place the {marker} marker on the selected face.", "无法在所选面部放置{marker}定位点。"),
     (
         "Capture the active mesh selection or chosen vertex group, then orient and fit again",
         "使用当前网格中选中的面或指定顶点组，重新设置面部朝向并生成曲线",
@@ -130,10 +138,6 @@ ENTRIES = (
     ),
     ("Choose the size of all exported textures.", "设置所有导出纹理的分辨率。"),
     ("Clean Face", "直线分界"),
-    (
-        "Click on the visible face to place a marker. No surface was hit.",
-        "没有点到面部。请点击视图中可见的面部表面，放置定位点。",
-    ),
     ("Close", "关闭"),
     (
         "Close this session and restore the workspace. Previously saved files are kept.",
@@ -253,7 +257,7 @@ ENTRIES = (
     ("Free handles", "自由控制柄"),
     ("Front", "正面"),
     ("Front view", "前视图"),
-    ("Frontal surface only", "仅处理朝向正面的表面"),
+    ("Frontal surface only", "仅处理正面可见区域"),
     ("Full floating-point precision; larger files", "完整浮点精度；文件较大"),
     ("Generate & Finish", "导出并关闭"),
     ("Generate & finish", "导出并关闭"),
@@ -353,16 +357,7 @@ ENTRIES = (
     ("Next Step  →", "下一步  →"),
     ("Next step", "下一步"),
     ("No face triangles were found.", "所选面部区域中没有可处理的三角面。"),
-    (
-        "No front-facing face surface. Reset the face orientation.",
-        "没有朝向正面的面部表面，请重新设置面部朝向。",
-    ),
     ("No recovery drafts are available.", "没有可恢复的草稿。"),
-    ("No visible face surface for fitting markers.", "没有可放置定位点的面部表面。请检查面部选择和朝向。"),
-    (
-        "No visible front-facing face texels. Check the forward/up alignment and face region.",
-        "没有可烘焙的正面区域。请检查面部的朝前、朝上方向，以及选取的面部范围。",
-    ),
     ("Nose", "鼻子"),
     ("Nose Accent", "突出鼻部"),
     ("Number of keyframes in each complete boundary sweep", "每组从全亮到全暗的关键帧数量，包含首尾两帧"),
@@ -390,14 +385,6 @@ ENTRIES = (
     ("Pause", "暂停"),
     ("Pause rotation", "暂停旋转"),
     ("Pause the light orbit.", "暂停光照旋转。"),
-    (
-        "Place Nose above Mouth Center, and Mouth Center above Chin.",
-        "请调整定位点：鼻子应在嘴部中心上方，嘴部中心应在下巴上方。",
-    ),
-    (
-        "Place Nose, Mouth Center, and Chin on the face before fitting.",
-        "生成曲线前，请将鼻子、嘴部中心和下巴三个定位点移到对应部位。",
-    ),
     ("Place markers.", "放置定位点。"),
     ("Play 360°", "播放 360°"),
     ("Point (head space)", "控制点坐标（面部）"),
@@ -409,7 +396,6 @@ ENTRIES = (
         "在工作室光照下查看模型原有材质的效果。预览使用材质副本，不会修改原材质。",
     ),
     ("Previous step", "上一步"),
-    ("Project file exceeds the 16 MB limit.", "工程文件超过 16 MB 限制。"),
     ("Project is missing {key}.", "工程缺少 {key}。"),
     ("Project round-trip verification failed.", "工程文件写入后未能通过重新读取验证。"),
     ("Projection coverage", "投影覆盖范围"),
@@ -500,10 +486,6 @@ ENTRIES = (
         "Select facial geometry in Edit Mode, then Create.",
         "在编辑模式下选中面部区域，然后点击“创建”。",
     ),
-    (
-        "Select this marker, then drag it onto the matching feature on the face.",
-        "选中此定位点，再将它拖到面部对应部位。",
-    ),
     ("Selected Faces", "选中的面"),
     ("Separate", "单独保存"),
     (
@@ -566,10 +548,6 @@ ENTRIES = (
     ("Texture maps must use R, G, B, or Separate.", "纹理必须使用 R、G、B 通道或“单独保存”。"),
     ("Texture resolution", "纹理分辨率"),
     (
-        "That point is outside supported frontal coverage. Choose a visible facial surface.",
-        "这里超出了可处理的正面范围，请在可见的面部表面上放置定位点。",
-    ),
-    (
         "The SDF recovery directory could not be created in Blender user data.",
         "无法在 Blender 用户数据中创建 SDF 恢复目录。",
     ),
@@ -579,11 +557,6 @@ ENTRIES = (
         "无法完成此次编辑。你可以继续操作。",
     ),
     ("The evaluated mesh has lost the selected UV map.", "应用修改器后的网格中找不到所选 UV。请检查模型的修改器设置。"),
-    ("The face has no finite UV triangles.", "面部区域没有有效的 UV 三角面。请检查 UV 是否缺失或含有无效坐标。"),
-    (
-        "The face projection has zero width or height. Orbit to face the character.",
-        "面部投影的宽度或高度为零。请旋转视图，使其朝向角色。",
-    ),
     (
         "The face region is empty. Select complete visible faces or a group containing complete faces.",
         "面部区域为空。请选择完整的可见面，或包含完整面的顶点组。",
@@ -592,7 +565,6 @@ ENTRIES = (
     ("The first keyframe has no preceding keyframe.", "第一个关键帧没有上一关键帧。"),
     ("The first keyframe has no previous keyframe.", "第一个关键帧没有上一关键帧。"),
     ("The floating editor could not initialize.", "无法初始化浮动编辑器。"),
-    ("The frontal subset is empty. Reset the face orientation.", "按当前朝向找不到可处理的正面区域，请重新设置面部朝向。"),
     ("The image is empty.", "图像为空。"),
     ("The main boundary cannot be deleted.", "不能删除明暗分界线。"),
     ("The main boundary stays first.", "明暗分界线必须位于列表首项。"),
@@ -603,7 +575,6 @@ ENTRIES = (
         "保存的面部区域与网格不再匹配。请重新关联源模型。",
     ),
     ("The saved image failed numeric verification.", "保存的图像未通过数值验证。"),
-    ("The selected region contains degenerate mesh triangles.", "所选区域包含退化的网格三角形。"),
     (
         "The source geometry, pose, or UVs changed. Reopen with 'Relink to Active Source' after checking its face region.",
         "模型形状、姿态或 UV 已改变。请检查面部选取范围，勾选“重新关联当前模型”后再次打开工程。",
@@ -623,7 +594,6 @@ ENTRIES = (
         "模型上有会改变网格结构的修改器。请先复制模型，在副本上禁用这些修改器，再开始编辑。",
     ),
     ("Too many PNG rows.", "PNG 行数过多。"),
-    ("Too many shapes in a keyframe.", "一个关键帧中的形状过多。"),
     ("Top", "顶部"),
     ("Top view", "顶视图"),
     ("Transfer to UV map", "烘焙到所选 UV"),
@@ -670,10 +640,6 @@ ENTRIES = (
         "使用活动网格在编辑模式下选中的可见多边形",
     ),
     (
-        "The selected face UVs must be inside a single 0–1 tile.",
-        "所选面部 UV 必须位于单个 0–1 区域内。",
-    ),
-    (
         "Validate the face and open an isolated curve-authoring preview",
         "验证面部，并打开独立的曲线编辑预览",
     ),
@@ -703,10 +669,6 @@ ENTRIES = (
         "Your authoring session is in the Anime SDF Gen popup.",
         "请在 Anime SDF Gen 浮动窗口中继续编辑。",
     ),
-    (
-        "{count} face triangles have zero-area UVs (first triangle {triangle}).",
-        "面部区域中有 {count} 个三角面的 UV 面积为零或过小，无法烘焙。请检查 UV 展开（首个三角面编号：{triangle}）。",
-    ),
     ("{direction} keyframe {index}/{count}", "{direction} · 关键帧 {index}/{count}"),
     ("{direction} · Keyframe {index}", "{direction} · 关键帧 {index}"),
     ("{label} · {progress:.0%}", "{label} · {progress:.0%}"),
@@ -714,10 +676,6 @@ ENTRIES = (
     ("{name} marker", "{name}定位点"),
     ("{name} {number}", "{name} {number}"),
     ("{name} · {channel}", "{name} · {channel}"),
-    (
-        "{name}: contour crosses itself or has coincident points.",
-        "{name}：轮廓自相交或存在重合点。",
-    ),
     ("{name}: {count} pixels", "{name}：{count} 个像素"),
     (
         "{path}\nChoose the folder and file name. Files are written by Generate & Finish.",

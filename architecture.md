@@ -33,6 +33,8 @@ With `mirror_sweeps` enabled, Left → Right owns editable artwork; Right → Le
 
 UV validation permits overlaps. UV transfer keeps the last valid triangle sample at each shared texel. Confirm can re-extract a different existing bake map after checking geometry, triangle identities, pose and region against the session. Only the face UV data, source fingerprint and existing `source.uv_map` / `authoring.uv_map` fields change; face-space caches and artwork remain intact. Reference meshes retain the source's active/render UV defaults independently of the bake map.
 
+Authoring and draft persistence do not require UVs or export-ready curves. Export requires an existing map with finite coordinates; collapsed UVs write nothing and out-of-tile areas are clipped. All selected geometry receives the projection by default, including hidden, reverse-facing and degenerate triangles. Optional frontal filtering applies both facing and depth visibility. Empty output is valid and reported after completion. Markers snap to available geometry or fall back to the drawing plane. Self-crossing curves use the same even–odd rasterization in preview and export; counts and draft size have no arbitrary caps.
+
 ## Cleanup and failure handling
 
 Session close cancels edits and cooperative jobs, removes timers, closes or restores the popup, disposes owned IDs/handlers, and clears CPU/GPU caches. Saving suspends the preview before serialization and rebuilds afterward. Failed exports retain the session and existing output files.

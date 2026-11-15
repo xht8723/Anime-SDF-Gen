@@ -15,26 +15,10 @@ def area(tris):
     return cross2(tris[:, 1] - tris[:, 0], tris[:, 2] - tris[:, 0])
 
 
-def validate_uv(uvs, positions=None):
+def validate_uv(uvs):
     uvs = np.asarray(uvs, dtype=float)
-    if not len(uvs) or not np.isfinite(uvs).all():
-        raise UserError("The face has no finite UV triangles.")
-    if uvs.min() < -1e-6 or uvs.max() > 1 + 1e-6:
-        raise UserError("The selected face UVs must be inside a single 0–1 tile.")
-    bad = np.flatnonzero(np.abs(area(uvs)) < 1e-12)
-    if len(bad):
-        raise UserError(
-            "{count} face triangles have zero-area UVs (first triangle {triangle}).",
-            count=len(bad),
-            triangle=int(bad[0]),
-        )
-    if positions is not None:
-        physical = np.linalg.norm(
-            np.cross(positions[:, 1] - positions[:, 0], positions[:, 2] - positions[:, 0]), axis=1
-        )
-        extent = float(np.max(np.ptp(positions.reshape(-1, 3), axis=0)))
-        if extent == 0 or np.any(physical <= extent * extent * 1e-14):
-            raise UserError("The selected region contains degenerate mesh triangles.")
+    if uvs.ndim != 3 or uvs.shape[1:] != (3, 2) or not np.isfinite(uvs).all():
+        raise UserError("The bake UV map contains invalid coordinates.")
 
 
 def triangle_pixels(tri, size):
@@ -42,8 +26,8 @@ def triangle_pixels(tri, size):
     den = float(cross2(tri[1] - tri[0], tri[2] - tri[0]))
     if abs(den) < 1e-14:
         return
-    lo = np.ceil(tri.min(axis=0) * size - 0.5).astype(int).clip(0, size)
-    hi = (np.floor(tri.max(axis=0) * size - 0.5).astype(int) + 1).clip(0, size)
+    lo = np.ceil(tri.min(axis=0) * size - 0.5).clip(0, size).astype(int)
+    hi = (np.floor(tri.max(axis=0) * size - 0.5) + 1).clip(0, size).astype(int)
     if np.any(hi <= lo):
         return
     for row in range(lo[1], hi[1], 32):
@@ -57,14 +41,24 @@ def triangle_pixels(tri, size):
             yield yy[inside], xx[inside], np.stack([a[inside], b[inside], c[inside]], axis=-1)
 
 
-def projection_steps(projected, size):
+def projection_steps(projected, size, *, front_only=False):
     depth = np.full((size, size), -np.inf, dtype=np.float32)
     facing = area(projected[..., :2]) > 1e-10
     for i, tri in enumerate(projected):
-        if facing[i]:
+        if not front_only or facing[i]:
             for y, x, weights in triangle_pixels((tri[:, :2] + PAD) / SPAN, size):
                 z = weights @ tri[:, 2]
                 depth[y, x] = np.maximum(depth[y, x], z)
+            if not front_only and abs(area(tri[None, :, :2])[0]) < 1e-14:
+                # Edge-on/point projections still receive UV samples. Include
+                # their bilinear sample footprint in the authoring domain.
+                for a, b in zip(tri, np.roll(tri, -1, axis=0)):
+                    count = max(1, int(np.ceil(np.max(np.abs(b[:2] - a[:2])) * size / SPAN * 2)))
+                    points = a + np.linspace(0, 1, count + 1)[:, None] * (b - a)
+                    xy = np.floor((points[:, :2] + PAD) * size / SPAN - 0.5).astype(int)
+                    for dx, dy in ((0, 0), (1, 0), (0, 1), (1, 1)):
+                        x, y = (xy + (dx, dy)).clip(0, size - 1).T
+                        np.maximum.at(depth, (y, x), points[:, 2])
         if i % 64 == 0:
             yield msg("Projection coverage"), i / max(1, len(projected))
     return depth, facing
@@ -77,15 +71,15 @@ def visible(depth, coords, tolerance):
     return np.isfinite(z) & (coords[:, 2] >= z - tolerance)
 
 
-def bake_steps(thresholds, uvs, projected, depth, facing, size):
+def bake_steps(thresholds, uvs, projected, depth, facing, size, *, front_only=False):
     output = np.ones((size, size, 3), dtype=np.float32)
     output[..., 2] = 0
     tolerance = 3 * SPAN / len(depth)
     for i, tri in enumerate(uvs):
-        if facing[i]:
+        if not front_only or facing[i]:
             for y, x, weights in triangle_pixels(tri, size):
                 coords = weights @ projected[i]
-                valid = visible(depth, coords, tolerance)
+                valid = visible(depth, coords, tolerance) if front_only else np.ones(len(coords), bool)
                 if np.any(valid):
                     yy, xx = y[valid], x[valid]
                     values = sample(thresholds, coords[valid, :2])
@@ -97,10 +91,6 @@ def bake_steps(thresholds, uvs, projected, depth, facing, size):
                     output[yy, xx, 2] = 1
         if i % 64 == 0:
             yield msg("Transfer to UV map"), i / max(1, len(uvs))
-    if not output[..., 2].any():
-        raise UserError(
-            "No visible front-facing face texels. Check the forward/up alignment and face region."
-        )
     return output
 
 

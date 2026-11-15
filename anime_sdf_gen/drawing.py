@@ -21,21 +21,24 @@ def face_shader():
     info = gpu.types.GPUShaderCreateInfo()
     info.vertex_in(0, "VEC3", "pos")
     info.vertex_in(1, "VEC3", "normal")
-    info.vertex_in(2, "VEC2", "texCoord")
+    info.vertex_in(2, "VEC3", "texCoord")
     interface = gpu.types.GPUStageInterfaceInfo("anime_sdf_gen_interface")
-    interface.smooth("VEC2", "uv")
+    interface.smooth("VEC3", "projectionCoord")
     interface.smooth("VEC3", "surfaceNormal")
     info.vertex_out(interface)
     info.push_constant("MAT4", "viewProjection")
     info.push_constant("VEC3", "lightDirection")
-    info.push_constant("VEC3", "faceForward")
+    info.push_constant("FLOAT", "frontOnly")
+    info.push_constant("FLOAT", "depthTolerance")
     info.push_constant("FLOAT", "flatView")
     info.sampler(0, "FLOAT_2D", "image")
+    info.sampler(1, "FLOAT_2D", "frontDepth")
     info.fragment_out(0, "VEC4", "fragColor")
     info.vertex_source(
-        "void main(){uv=texCoord;surfaceNormal=normal;gl_Position=viewProjection*vec4(pos,1.0);}"
+        "void main(){projectionCoord=texCoord;surfaceNormal=normal;gl_Position=viewProjection*vec4(pos,1.0);}"
     )
     info.fragment_source("""void main(){
+        vec2 uv=projectionCoord.xy;
         vec3 mask=texture(image,uv).rgb;
         vec3 n=normalize(surfaceNormal);
         float shadow=step(0.5,mask.r);
@@ -44,7 +47,7 @@ def face_shader():
         vec3 color=mix(lit,dark,shadow);
         float form=0.45+0.55*max(0.0,dot(n,lightDirection));
         color*=mix(form,1.0,flatView);
-        if(dot(n,faceForward)<=0.0 || mask.b<0.5) color=vec3(0.12);
+        if(frontOnly>0.5 && (mask.b<0.5 || projectionCoord.z<texture(frontDepth,uv).r-depthTolerance)) color=vec3(0.12);
         if(mask.g>0.5) color=vec3(1.0,0.015,0.38);
         fragColor=vec4(color,1.0);
     }""")
@@ -87,8 +90,8 @@ def draw_author(s, region, view):
 
 
 def draw_landmarks(s, view):
-    for name, anchor in s.project["authoring"]["anchors"].items():
-        q = view.project(anchor["world"])
+    for name in s.project["landmarks"]:
+        q = view.project(s.landmark_world(name))
         if q is None:
             continue
         color = (0.25, 1, 0.55, 1) if name == s.landmark else (0.5, 0.87, 0.75, 1)
@@ -103,6 +106,8 @@ def draw_landmarks(s, view):
 
 
 def draw_face(s, view):
+    if not len(s.face.triangles):
+        return
     if s.preview._face_shader is None:
         s.preview._face_shader = face_shader()
     if s.preview._face_batch is None:
@@ -116,9 +121,10 @@ def draw_face(s, view):
             {
                 "pos": s.face.vertices[indices].astype(np.float32),
                 "normal": normals.reshape(-1, 3)[indices],
-                "texCoord": ((s.face.projected[..., :2] + model.PAD) / model.SPAN)
-                .reshape(-1, 2)
-                .astype(np.float32),
+                "texCoord": np.concatenate([
+                    (s.face.projected[..., :2] + model.PAD) / model.SPAN,
+                    s.face.projected[..., 2:3],
+                ], axis=-1).reshape(-1, 3).astype(np.float32),
             },
         )
     a = s.project["alignment"]
@@ -132,7 +138,8 @@ def draw_face(s, view):
         + Vector(a["up"]) * 0.25
     )
     shader.uniform_float("lightDirection", light.normalized())
-    shader.uniform_float("faceForward", a["forward"])
+    shader.uniform_float("frontOnly", float(s.face.reference["front_only"]))
+    shader.uniform_float("depthTolerance", 3 * model.SPAN / s.size)
     shader.uniform_float("flatView", 1.0 if s.flat else 0.0)
     # Image.update() does not invalidate every backend's from_image cache in
     # an offscreen draw. Upload this revision explicitly in the GPU context.
@@ -148,6 +155,13 @@ def draw_face(s, view):
         s.preview._mask_texture.filter_mode(False)
         s.preview._mask_texture_revision = s.preview.mask_revision
     shader.uniform_sampler("image", s.preview._mask_texture)
+    if s.preview._depth_texture is None:
+        depth = np.where(np.isfinite(s.preview.depth), s.preview.depth, -1e30).astype(np.float32)
+        s.preview._depth_texture = gpu.types.GPUTexture(
+            (s.size, s.size), format="R32F", data=gpu.types.Buffer("FLOAT", depth.size, depth.ravel())
+        )
+        s.preview._depth_texture.filter_mode(False)
+    shader.uniform_sampler("frontDepth", s.preview._depth_texture)
     gpu.state.blend_set("NONE")
     gpu.state.depth_test_set("LESS_EQUAL")
     gpu.state.depth_mask_set(True)

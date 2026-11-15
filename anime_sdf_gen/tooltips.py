@@ -289,7 +289,7 @@ def describe(s, key, enabled=True):
         ]
         tip = (
             msg("{name} marker", name=msg(name)),
-            mark("Select this marker, then drag it onto the matching feature on the face."),
+            mark("Drag this fitting guide freely. It snaps to the mesh, or stays on the drawing plane when no surface is hit."),
         )
     elif key.startswith("LAYER:"):
         curve = s.keyframe["contours"][int(key.split(":")[1])]

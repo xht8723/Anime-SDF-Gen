@@ -83,8 +83,8 @@ def workflow():
             bpy.ops.wm.redraw_timer(type="DRAW_WIN_SWAP", iterations=1)
 
     redraw()
-    old = np.load(REFERENCE) if not CAPTURE else None
-    matrix = np.asarray(e.views["PREVIEW"].perspective_matrix) if CAPTURE else old["matrix"]
+    old = np.load(REFERENCE) if REFERENCE.exists() else None
+    matrix = np.asarray(e.views["PREVIEW"].perspective_matrix) if old is None else old["matrix"]
     data = {"matrix": matrix, "fingerprint": np.array(face.reference["fingerprint"])}
     samples = []
     for index in (0, 4, 8):
@@ -118,6 +118,16 @@ def workflow():
             data[name + "_gpu"] = render(s, matrix)
             samples.append(s.preview.last_render_ms)
     if CAPTURE:
+        if old is not None:
+            # Refreshing GPU shading must not silently accept changed masks,
+            # thresholds or camera framing.
+            for key, value in data.items():
+                if key != "fingerprint" and not key.endswith("_gpu"):
+                    np.testing.assert_array_equal(value, old[key], err_msg=key)
+            changes = {key: int(np.count_nonzero(np.any(value != old[key], axis=-1)))
+                       for key, value in data.items() if key.endswith("_gpu")}
+            (OUT / "capture-changes.json").write_text(json.dumps(changes, indent=2))
+            old.close()
         REFERENCE.parent.mkdir(parents=True, exist_ok=True)
         np.savez_compressed(REFERENCE, **data)
     else:

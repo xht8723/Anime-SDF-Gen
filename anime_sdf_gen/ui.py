@@ -262,7 +262,10 @@ class ANIME_SDF_GEN_OT_settings(bpy.types.Operator):
         translation_context=CONTEXT,
     )
     uv_map: StringProperty(name="Bake UV map", translation_context=CONTEXT)
-    front_only: BoolProperty(name="Frontal surface only", default=True, translation_context=CONTEXT)
+    front_only: BoolProperty(
+        name="Frontal surface only", default=False, translation_context=CONTEXT,
+        description="Restrict shadows to front-visible surfaces. Off includes all selected geometry; On can exclude cheeks, underside and hidden surfaces.",
+    )
     keyframes: IntProperty(
         name="Shadow keyframes",
         description="Number of keyframes in each complete boundary sweep",
@@ -669,10 +672,7 @@ class ANIME_SDF_GEN_OT_open(bpy.types.Operator, ImportHelper):
                 p["source"], p["alignment"] = f.reference, f.alignment
                 p["authoring"].update(stage="REORIENT", anchors={}, uv_map=f.reference["uv_map"])
             else:
-                f = source.from_reference(
-                    p["source"], p["alignment"],
-                    validate=p["authoring"]["stage"] not in ("ORIENT", "REORIENT"),
-                )
+                f = source.from_reference(p["source"], p["alignment"])
             session.start(context, p, f)
             return {"FINISHED"}
         except Exception as exc:
@@ -729,6 +729,8 @@ class ANIME_SDF_GEN_PT_launcher(bpy.types.Panel):
             box = layout.box()
             box.label(text=iface("Export complete"), icon="CHECKMARK", translate=False)
             wrapped(box, msg("Saved {count} files", count=len(paths)))
+            if session.LAST_COVERAGE_TEXELS == 0:
+                wrapped(box, "0 texels baked. The output contains no face coverage.")
             wrapped(box, str(Path(paths[-1]).parent), translate=False)
             folder = box.operator("wm.path_open", text=iface("Open output folder"), icon="FILE_FOLDER")
             folder.filepath = str(Path(paths[-1]).parent)

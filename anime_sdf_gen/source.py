@@ -17,7 +17,7 @@ class FaceSource:
     alignment: dict
     vertices: np.ndarray
     triangles: np.ndarray
-    uvs: np.ndarray
+    uvs: np.ndarray | None
     projected: np.ndarray
     triangle_vertices: np.ndarray
     material_indices: np.ndarray
@@ -54,26 +54,30 @@ def capture(obj, region="SELECTED", group=""):
     uv_name = obj.data.uv_layers.active.name if obj.data.uv_layers.active else ""
     ids = selected_faces(obj) if region == "SELECTED" else None
     return extract(
-        obj, uv_name, region=region, selected=ids, group=group, validate=False, front_only=False
+        obj, uv_name, region=region, selected=ids, group=group, front_only=False
     )
 
 
 def fit_frame(vertices, forward, up):
     f = np.asarray(forward, dtype=float)
+    if not np.isfinite(vertices).all():
+        raise UserError("The source geometry contains invalid coordinates.")
+    if not np.isfinite(f).all() or np.linalg.norm(f) < 1e-12:
+        raise UserError("Face forward and up must be different directions.")
     f /= np.linalg.norm(f)
     u = np.asarray(up, dtype=float)
     u -= f * np.dot(u, f)
-    if np.linalg.norm(u) < 1e-8:
+    if not np.isfinite(u).all() or np.linalg.norm(u) < 1e-8:
         raise UserError("Face forward and up must be different directions.")
     u /= np.linalg.norm(u)
     r = np.cross(u, f)
     center = (vertices.min(axis=0) + vertices.max(axis=0)) / 2
     raw = (vertices - center) @ np.stack([r, u, f], axis=1)
     extents = np.ptp(raw[:, :2], axis=0)
-    if extents.min() < 1e-8:
-        raise UserError(
-            "The face projection has zero width or height. Orbit to face the character."
-        )
+    # An edge-on initial view must not prevent reaching Orientation. Collapsed
+    # axes get a finite canvas using the remaining world-space extent.
+    extent = float(np.ptp(vertices, axis=0).max()) or 1.0
+    extents = np.where(extents > extent * 1e-8, extents, extent)
     center += (
         r * (raw[:, 0].max() + raw[:, 0].min()) / 2 + u * (raw[:, 1].max() + raw[:, 1].min()) / 2
     )
@@ -112,13 +116,15 @@ def _extract_object_mode(
     region="SELECTED",
     selected=None,
     alignment=None,
-    validate=True,
+    require_uv=False,
     front_only=False,
     group="",
 ):
     if not obj or obj.type != "MESH":
         raise UserError("Select a source mesh first.")
-    if uv_name not in obj.data.uv_layers:
+    if require_uv and not uv_name:
+        raise UserError("Choose a bake UV map before exporting.")
+    if require_uv and uv_name not in obj.data.uv_layers:
         raise UserError("The source has no UV map named {uv_name}.", uv_name=uv_name)
     if selected is None:
         selected = [p.index for p in obj.data.polygons if p.select and not p.hide]
@@ -157,7 +163,7 @@ def _extract_object_mode(
             raise UserError(
                 "This version needs topology-preserving evaluation. Disable topology-changing modifiers on a source copy before authoring."
             )
-        if uv_name not in mesh.uv_layers:
+        if require_uv and uv_name not in mesh.uv_layers:
             raise UserError("The evaluated mesh has lost the selected UV map.")
         mesh.calc_loop_triangles()
         tris = [t for t in mesh.loop_triangles if t.polygon_index in face_ids]
@@ -168,6 +174,8 @@ def _extract_object_mode(
         vertices = np.asarray(
             [list(obj.matrix_world @ mesh.vertices[v].co) for v in vids], dtype=np.float64
         )
+        if not np.isfinite(vertices).all():
+            raise UserError("The source geometry contains invalid coordinates.")
         triangles = np.asarray([[remap[v] for v in t.vertices] for t in tris], dtype=np.int32)
         all_uvs = {
             uv.name: np.asarray(
@@ -185,6 +193,8 @@ def _extract_object_mode(
         local[:, 0] = local[:, 0] / alignment["width"] + 0.5
         local[:, 1] = local[:, 1] / alignment["height"] + 0.5
         local[:, 2] /= max(alignment["width"], alignment["height"])
+        if not np.isfinite(local).all():
+            raise UserError("The face alignment contains invalid coordinates.")
         excluded = 0
         if front_only:
             keep = area(local[triangles][..., :2]) > 1e-10
@@ -192,14 +202,15 @@ def _extract_object_mode(
             triangles = triangles[keep]
             triangle_vertices, material_indices = triangle_vertices[keep], material_indices[keep]
             all_uvs = {name: arr[keep] for name, arr in all_uvs.items()}
-            if not len(triangles):
-                raise UserError("The frontal subset is empty. Reset the face orientation.")
-        uvs = all_uvs[uv_name]
-        if validate:
-            validate_uv(uvs, vertices[triangles])
+        uvs = all_uvs.get(uv_name)
+        if require_uv:
+            validate_uv(uvs)
         digest = hashlib.sha256()
-        for array in (vertices, triangles, uvs):
+        for array in (vertices, triangles, triangle_vertices):
             digest.update(np.ascontiguousarray(array).tobytes())
+        # Keep geometry identity independently checkable when a saved bake map
+        # is unavailable. Authoring can reopen; export still requires the map.
+        uv_digest = hashlib.sha256(b"missing" if uvs is None else np.ascontiguousarray(uvs).tobytes())
         reference = {
             "blend_file": bpy.data.filepath,
             "object": obj.name,
@@ -210,7 +221,7 @@ def _extract_object_mode(
             "front_only": front_only,
             "vertex_group": group,
             "excluded_triangles": excluded,
-            "fingerprint": digest.hexdigest(),
+            "fingerprint": digest.hexdigest() + ":" + uv_digest.hexdigest(),
         }
         return FaceSource(
             reference,
@@ -230,7 +241,7 @@ def _extract_object_mode(
         evaluated.to_mesh_clear()
 
 
-def from_reference(ref, alignment, *, validate=True, allow_relink=False):
+def from_reference(ref, alignment, *, require_uv=False, allow_relink=False):
     target = bpy.data.objects.get(ref["object"])
     face = extract(
         target,
@@ -238,13 +249,16 @@ def from_reference(ref, alignment, *, validate=True, allow_relink=False):
         region=ref["region"],
         selected=ref["faces"],
         alignment=alignment,
-        validate=validate,
+        require_uv=require_uv,
         front_only=ref["front_only"],
         group=ref["vertex_group"],
     )
     if not allow_relink and face.reference["faces"] != ref["faces"]:
         raise UserError("Vertex-group membership changed. Relink the source before regenerating.")
-    if not allow_relink and face.reference["fingerprint"] != ref["fingerprint"]:
+    actual, expected = face.reference["fingerprint"], ref["fingerprint"]
+    if face.uvs is None and not require_uv:
+        actual, expected = actual.partition(":")[0], expected.partition(":")[0]
+    if not allow_relink and actual != expected:
         raise UserError(
             "The source geometry, pose, or UVs changed. Reopen with 'Relink to Active Source' after checking its face region."
         )

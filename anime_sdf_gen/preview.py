@@ -23,6 +23,7 @@ class Preview:
         self.rgba = np.ones((session.size, session.size, 4), dtype=np.float32)
         self.mask_revision = 0
         self._mask_texture = self._face_shader = self._face_batch = None
+        self._depth_texture = None
         self._mask_texture_revision = -1
         self.last_render_ms = 0.0
 
@@ -97,7 +98,7 @@ class Preview:
                 self.session.redraw()
                 break
 
-    def render(self, validate=False):
+    def render(self):
         start = time.perf_counter()
         try:
             if self.session.orbit_preview and self.thresholds is not None:
@@ -105,14 +106,12 @@ class Preview:
                 channel = 0 if direction == model.LTR else 1
                 mask = decode(self.thresholds[..., channel], progress)
             else:
-                # Preview the current artwork immediately, including an invalid
-                # contour being repaired. Validation still blocks generation.
+                # Editing and compilation use the same even-odd fill rule.
                 mask = curves.raster_keyframe(
                     self.session.project,
                     self.session.keyframe,
                     self.session.direction,
                     self.session.size,
-                    False,
                     self.mask_cache,
                 )
             self.rgba[..., 0] = mask
@@ -120,15 +119,6 @@ class Preview:
             self.rgba[..., 2] = self.domain
             self.mask_revision += 1
             self.session.redraw()
-            if validate:
-                curves.raster_keyframe(
-                    self.session.project,
-                    self.session.keyframe,
-                    self.session.direction,
-                    self.session.size,
-                    True,
-                    self.mask_cache,
-                )
         except ValueError as exc:
             self.session.error = diagnostic(exc)
         self.last_render_ms = (time.perf_counter() - start) * 1000
@@ -192,7 +182,7 @@ class Preview:
         self.cancel()
         self.thresholds = self.raw_thresholds = None
         self.filtered_key = None
-        self._face_shader = self._face_batch = self._mask_texture = None
+        self._face_shader = self._face_batch = self._mask_texture = self._depth_texture = None
         self.depth = self.domain = self.rgba = None
         self.field_cache.clear()
         self.mask_cache.clear()

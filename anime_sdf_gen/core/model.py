@@ -120,7 +120,7 @@ def new_project(
             "anchors": {},
             "reference": "NEUTRAL",
             "keyframe_count": count,
-            "front_only": True,
+            "front_only": source["front_only"],
             "uv_map": source["uv_map"],
         },
         "encoding": deepcopy(ENCODING),
@@ -293,6 +293,11 @@ def validate_project(p):
         p["alignment"], ("center", "forward", "up", "right", "width", "height"), "alignment."
     )
     _require_fields(p["landmarks"], DEFAULT_LANDMARKS, "landmarks.")
+    for xy in p["landmarks"].values():
+        if not isinstance(xy, list) or len(xy) != 2 or any(
+            not isinstance(v, (int, float)) or not math.isfinite(v) for v in xy
+        ):
+            raise UserError("Invalid landmark position.")
     _require_fields(p["sweeps"], SWEEP_LABELS, "sweeps.")
     _require_fields(
         p["settings"],
@@ -337,14 +342,12 @@ def validate_project(p):
             cs = frame["contours"]
             if not cs or cs[0]["closed"] or any(not c["closed"] for c in cs[1:]):
                 raise UserError("Each keyframe needs one main boundary followed by closed shapes.")
-            if len(cs) > 128:
-                raise UserError("Too many shapes in a keyframe.")
             for c in cs:
                 if not isinstance(c.get("enabled"), bool):
                     raise UserError("Contour visibility must be true or false.")
                 if (
                     c["operation"] not in ("ADD", "REMOVE")
-                    or not (3 if c["closed"] else 2) <= len(c["points"]) <= 256
+                    or len(c["points"]) < (3 if c["closed"] else 2)
                 ):
                     raise UserError("Invalid contour operation or point count.")
                 for pt in c["points"]:
@@ -395,8 +398,6 @@ def dumps(project):
 
 
 def loads(text):
-    if len(text) > 16_000_000:
-        raise UserError("Project file exceeds the 16 MB limit.")
     return validate_project(json.loads(text))
 
 

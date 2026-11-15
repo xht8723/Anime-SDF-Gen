@@ -1,10 +1,10 @@
 # Anime SDF Gen — usage
 
-Version **0.20.0**, maintained by [xht8723](https://github.com/xht8723). Blender **5.2 LTS** on Windows.
+Version **0.21.0**, maintained by [xht8723](https://github.com/xht8723). Blender **5.2 LTS** on Windows.
 
 ## Install and create
 
-In **Edit → Preferences → Get Extensions**, open the menu and choose **Install from Disk**. Select `anime_sdf_gen-0.20.0.zip` and enable **Anime SDF Gen**. In the original 3D View, press **N** and open **Anime SDF Gen**.
+In **Edit → Preferences → Get Extensions**, open the menu and choose **Install from Disk**. Select `anime_sdf_gen-0.21.0.zip` and enable **Anime SDF Gen**. In the original 3D View, press **N** and open **Anime SDF Gen**.
 
 Close any authoring session before replacing the installed extension. Restart Blender after installing the new build so its Python modules load fresh.
 
@@ -45,14 +45,14 @@ Both setup steps allow orbiting. During curve editing the authoring view is fixe
 
 ## Orient and fit
 
-1. **Orient the face to front view.** Orbit until the face looks straight at you and the head is upright. **Source / UV…** contains **Bake UV map** and **Frontal surface only**. The bake map defaults to the active map captured when creating the session. Click **Next Step**.
-2. **Place markers.** Nose, Mouth Center and Chin already appear at approximate default positions on the face. Drag each handle onto the matching feature. You can orbit to inspect it. Nose must be above mouth, and mouth above chin. Choose a preset, **Keyframes per sweep** and **Mirror Full Sweep**, then click **Next Step**.
+1. **Orient the face to front view.** Orbit until the face looks straight at you and the head is upright. **Source / UV…** contains **Bake UV map** and **Frontal surface only**. The bake map defaults to the active map captured when creating the session. Frontal filtering is **off by default**, so all selected geometry receives the projection. Turn it on only to exclude surfaces facing away or hidden from the front; this can also exclude cheeks and the underside of the chin. Click **Next Step**.
+2. **Place markers.** Nose, Mouth Center and Chin appear at approximate default positions. Drag them wherever they help fit your curves; no anatomical ordering is required. You can orbit to inspect them. Choose a preset, **Keyframes per sweep** and **Mirror Full Sweep**, then click **Next Step**.
 3. **Adjust curves.** The curve editor and live shadow view appear together, starting on keyframe 1 of Left → Right. Select keyframes and adjust their curve points, then click **Next Step**.
 4. **Confirm.** A single large preview automatically rotates the light through **Front → character left → Back → character right → Front** and repeats. Choose the save location, file name, bake UV map, texture resolution and output packing, then click **Generate & Finish**.
 
 Returning from editing to markers shows **Return to editing**, which keeps all current curves, frame positions and counts. Changes to markers, the starting preset or the fitting count apply only through **Refit boundaries…**. That separate action asks before replacing every main boundary; extra shapes are copied from nearby existing frames, so reducing the frame count can omit shapes. Refitting is undoable. The safe return route survives drafts, reopening, Blender save/resume, and revisiting orientation.
 
-The default marker positions fit the face bounds and snap to the frontal surface. If a default falls over an opening, it moves to nearby supported geometry. These are starting positions, not detected anatomy. Empty-space clicks leave markers unchanged. The keyframe count has small minus/plus buttons around a wide, centered numeric selector. Click the number for direct entry; any count from **2 to 33** works, including even counts. Both endpoints are included in that count.
+The default marker positions fit the face bounds and snap to the mesh where possible. If a default falls over an opening, it tries nearby geometry. Markers without a surface stay on the drawing plane; dragging into empty space also places them on that plane. These are fitting guides, not detected anatomy. The keyframe count has small minus/plus buttons around a wide, centered numeric selector. Click the number for direct entry; any count from **2 to 33** works, including even counts. Both endpoints are included in that count.
 
 **Neutral** reference shading makes facial features visible. **Materials** displays copied source materials under preview lighting. Presets fit the selected bounds and landmarks; they do not detect anatomy automatically.
 
@@ -104,7 +104,9 @@ The shadow preview uses warm lit regions, cool shadow regions, and smooth surfac
 
 The current keyframe's projected **512-pixel mask**, including carried lit cutouts, updates immediately while dragging. After editing pauses, cached distance fields calculate the interpolated sweep. Playback decodes those thresholds into the displayed mask; it does not rebuild distance fields every frame. A new edit or cancellation discards unfinished interpolation work. There is one preview implementation, with no live UV-texture/toon mode retained.
 
-Each direction encodes one lit-to-shadow transition per pixel. Lit cutouts carry backward automatically to satisfy this rule. Remaining reversals caused by main boundaries or Shadow patches appear magenta, with the offending keyframes in the warning footer; generation is blocked until corrected. Self-intersections also block export. Generation computes and validates at the chosen output resolution.
+Each direction encodes one lit-to-shadow transition per pixel. Lit cutouts carry backward automatically to satisfy this rule. Remaining reversals caused by main boundaries or Shadow patches appear magenta, with the offending keyframes in the warning footer; generation is blocked until corrected, but drafts can still be saved. Generation computes and validates at the chosen output resolution.
+
+Crossing curves, coincident points and collapsed shapes are accepted. Crossings use even–odd filling: each boundary crossing switches between inside and outside, so intersecting loops can leave holes. Shape and point counts have no fixed cap; complex artwork takes more time and memory to process.
 
 The two first masks meet at Front; the two last masks meet at Back. If their artwork differs, switching maps can cause a visible jump. An **orbit seam** warning identifies the endpoint and pixel count. You can align the endpoint artwork for seamless rotation, or keep it and export. This warning does not silently merge the rows. Default preset endpoints match.
 
@@ -114,7 +116,9 @@ In **Confirm**, click the **Save location** field to choose a folder and file na
 
 **Bake UV map**, above Texture resolution, opens a searchable list of the source mesh's UV maps. You can also choose it through **Source / UV…** in Orientation. Changing it in Confirm keeps the current fit, artwork, landmarks, history and projected preview. It does not change the source's active/render UV maps or the **Materials** reference shading. The choice is retained through stage changes, drafts, saving, reopening and export. If source geometry, pose or region membership has changed, relink the source before switching maps.
 
-Overlapping and mirrored UVs are allowed without overlap checks. At shared texels, later valid triangle samples overwrite earlier values. Different face locations may therefore receive the same baked shadow even when their projected preview differs. Inspect the export and adjust the chosen UV map if needed. Maps must still have finite coordinates, nonzero triangle areas and fit inside a single 0–1 tile.
+Overlapping and mirrored UVs are allowed without overlap checks. At shared texels, later valid triangle samples overwrite earlier values. Different face locations may therefore receive the same baked shadow even when their projected preview differs. Inspect the export and adjust the chosen UV map if needed. Collapsed UV triangles write no samples; out-of-tile areas are skipped. Coordinates must still be finite.
+
+You can draw, preview, and save drafts without a UV map. Choose an existing map before exporting. A saved project whose map is missing can reopen for editing; geometry and pose checks still apply. Draft files have no fixed 16 MB limit. If no texels are baked, export still succeeds with always-lit background thresholds and zero face coverage; the completion card reports this result.
 
 **Output precision** applies to every generated texture: **8-bit PNG**, **16-bit PNG** (default), or **32-bit Float EXR**. Depth is per channel. The live preview uses floating-point thresholds; bit-depth quantization is applied during export. 8-bit saves space but can produce coarser sweep transitions; 32-bit stores the calculated floating-point precision in larger, uncompressed EXR files. The destination extension and file list follow this choice.
 
@@ -148,6 +152,6 @@ Only complete records using the documented current schema are accepted. Missing 
 
 ## Supported models
 
-Use UVs in one 0–1 tile and topology-preserving evaluation. Current armature and shape-key deformation is captured. Prepare a source copy when topology-changing modifiers are required. Shared UV texels store only one value per output channel.
+The output covers the 0–1 UV tile: triangles crossing its boundary are clipped, triangles outside it are skipped, and UV triangles collapsed to a line or point write no texels. This is not UDIM export. Coordinates must be finite. Current armature and shape-key deformation is captured; evaluation must preserve topology. Prepare a source copy when topology-changing modifiers are required. Shared UV texels store only one value per output channel.
 
-One frontal projection cannot independently author the rear head, hidden cavities, or underside shadows. The Face coverage map marks supported regions; restrict the eventual shader to the intended face geometry when other surfaces share those UVs. See the [format guide](output-format.md) for decoding and [validation](validation.md) for measured performance.
+All selected surfaces receive the same frontal projection by default, including back-facing, hidden and edge-on surfaces. Surfaces at the same projected location share artwork; they cannot be authored independently in this projection. Choose the source region and final material coverage to control where the effect applies. The optional frontal filter restricts coverage to front-visible surfaces. See the [format guide](output-format.md) for decoding and [validation](validation.md) for measured performance.

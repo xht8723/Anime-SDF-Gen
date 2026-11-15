@@ -13,6 +13,9 @@ sys.path.insert(0, str(ROOT))
 from tests.support import runtime_digest
 
 REQUIRED = {
+    "permissive",
+    "permissive-ui-2k",
+    "permissive-ui-4k",
     "shape-sidebar-2k",
     "shape-sidebar-4k",
     "artist-ux-2k",

@@ -194,7 +194,7 @@ def run_all():
             obj.location.x += 0.01
             bpy.context.view_layer.update()
             try:
-                source.from_reference(s.project["source"], s.project["alignment"], validate=False)
+                source.from_reference(s.project["source"], s.project["alignment"])
                 raise AssertionError("Source mismatch was not rejected")
             except ValueError as exc:
                 assert "changed" in str(exc)

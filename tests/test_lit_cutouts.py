@@ -142,15 +142,16 @@ class LitCutoutTests(unittest.TestCase):
             self.assertFalse((last & ~mask).any())
             last = mask
 
-    def test_invalid_future_curve_cannot_reuse_unvalidated_mask(self):
+    def test_collapsed_future_curve_uses_same_fill_with_or_without_cache(self):
         p = project(9)
         c = triangle(-0.14)
         c["points"][1]["co"] = c["points"][0]["co"][:]
         p["sweeps"][model.LTR][-1]["contours"].append(c)
         cache = {}
-        curves.raster_keyframe(p, p["sweeps"][model.LTR][0], model.LTR, 64, False, cache)
-        with self.assertRaisesRegex(ValueError, "crosses itself|coincident"):
-            run(compile.compile_steps(p, 64, mask_cache=cache))
+        curves.raster_keyframe(p, p["sweeps"][model.LTR][0], model.LTR, 64, cache)
+        np.testing.assert_array_equal(
+            run(compile.compile_steps(p, 64, mask_cache=cache)), compile.compile_project(p, 64)
+        )
 
     def test_unrelated_shadow_reversal_still_rejected(self):
         p = project(9)

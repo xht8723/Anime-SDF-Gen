@@ -1,4 +1,14 @@
-# Anime SDF Gen 0.20.0 — validation
+# Anime SDF Gen 0.21.0 — validation
+
+## Permissive authoring — November 14, 2026
+
+Evidence is under `build/validation/permissive-authoring`. The numerical suite contains 88 tests, including full selected-surface coverage, hidden/back-facing/degenerate projection, clipped and collapsed UVs, empty output, even–odd crossing curves, drafts above the former size/count caps, and retained finite-input and monotonic-sweep checks.
+
+Disposable Blender checks cover UV-free creation, fitting, drafts and reopening; missing saved maps without concealing geometry changes; later UV assignment; free-plane markers and unusual marker ordering; fully filtered geometry and zero-coverage exports. Real popup workflows at 2K and 4K exercise the filter's native checkbox, off-mesh marker dragging, missing-UV export recovery and successful empty export. GPU probes verify lit and shadow endpoints on front and reverse-facing triangles.
+
+All four `bugs.blend` faces export at 512 pixels with frontal filtering off and on. With filtering off, output coverage equals the complete rasterizable UV footprint, and every covered texel reaches the default lit/shadow endpoints. With filtering on, the existing facing and depth restrictions apply. The frozen GPU reference is refreshed for the optional depth mask, while its camera, numerical masks and thresholds must remain identical.
+
+The full matrix also covers native dialogs, guards, mirror locking, curve/sidebar/navigation controls, English/Chinese UI, save/resume, output precision and packaging. Source models and the authored README draft are checked against `protected-files-before.json`; the files are never saved by validation. See [full run](build/validation/permissive-authoring/run-all.json).
 
 ## GitHub release and Chinese wording — November 13, 2026
 

@@ -12,7 +12,7 @@ from mathutils import Vector
 from . import source, i18n
 from .core import model, editing
 from .core.jobs import run
-from .core.geometry import projection_steps, visible
+from .core.geometry import projection_steps
 from .core.files import atomic_text
 from .resources import Registry, OriginContext
 from .preview import Preview
@@ -26,6 +26,7 @@ from mathutils.bvhtree import BVHTree
 ACTIVE = None
 SUSPENDED = None
 LAST_EXPORT = None
+LAST_COVERAGE_TEXELS = None
 
 
 def draft_root():
@@ -91,9 +92,10 @@ class Session:
         return self.project["authoring"]["stage"] in ("REORIENT", "REFIT")
 
     def finish_export(self):
-        global LAST_EXPORT
+        global LAST_EXPORT, LAST_COVERAGE_TEXELS
         # These paths come from the committed export snapshot, not live settings.
         LAST_EXPORT = tuple(self.export.paths)
+        LAST_COVERAGE_TEXELS = self.export.coverage_texels
         end_session(remove_draft=True)
         for window in bpy.context.window_manager.windows:
             for area in window.screen.areas:
@@ -104,10 +106,11 @@ class Session:
         self.bvh = BVHTree.FromPolygons(
             face.vertices.tolist(), face.triangles.tolist(), all_triangles=True
         )
-        self.preview.depth, _ = run(projection_steps(face.projected, self.size))
+        self.preview.depth, _ = run(projection_steps(
+            face.projected, self.size, front_only=face.reference["front_only"]
+        ))
+        self.preview._depth_texture = None
         self.preview.domain = np.isfinite(self.preview.depth)
-        if not self.preview.domain.any() and self.stage != "ORIENT":
-            raise UserError("No front-facing face surface. Reset the face orientation.")
 
     def redraw(self):
         if self.editor:
@@ -223,14 +226,12 @@ class Session:
             self.frame_view()
 
     def seed_landmarks(self):
-        """Attach missing default markers to the visible frontal surface."""
+        """Snap defaults where possible; unanchored markers stay on the drawing plane."""
         a = self.project["alignment"]
         extent = max(a["width"], a["height"])
-        start_depth = (float(np.max(self.face.projected[..., 2])) + 1) * extent
+        start_depth = (float(np.max(self.face.projected[..., 2], initial=0)) + 1) * extent
         direction = -Vector(a["forward"])
         covered = np.argwhere(self.preview.domain)
-        if not len(covered):
-            raise UserError("No visible face surface for fitting markers.")
         supported = (covered[:, ::-1] + 0.5) * model.SPAN / self.size - model.PAD
         for name in model.DEFAULT_LANDMARKS:
             if name in self.project["authoring"]["anchors"]:
@@ -244,22 +245,27 @@ class Session:
                 hit, _, index, _ = self.bvh.ray_cast(origin, direction)
                 if hit is not None and self.place_landmark(hit, index, name):
                     break
-            else:
-                raise UserError(
-                    "Cannot place the {marker} marker on the selected face.",
-                    marker=msg({"nose": "Nose", "mouth": "Mouth Center", "chin": "Chin"}[name]),
-                )
         self.landmark = "nose"
         self.error = ""
         self.sync_launcher()
         self.redraw()
 
+    def landmark_world(self, name):
+        anchor = self.project["authoring"]["anchors"].get(name)
+        return Vector(anchor["world"]) if anchor else source.world_point(
+            self.project["alignment"], self.project["landmarks"][name], 0
+        )
+
     def pick_landmark(self, view, mouse, name=None):
         origin, direction = view.ray(mouse)
         hit, _, index, _ = self.bvh.ray_cast(origin, direction)
         if hit is None:
-            self.notify_error("Click on the visible face to place a marker. No surface was hit.")
-            return False
+            a = self.project["alignment"]
+            normal = Vector(a["forward"])
+            denominator = direction.dot(normal)
+            if abs(denominator) < 1e-10:
+                return False
+            hit = origin + direction * ((Vector(a["center"]) - origin).dot(normal) / denominator)
         return self.place_landmark(hit, index, name or self.landmark)
 
     def place_landmark(self, hit, index, name):
@@ -272,22 +278,21 @@ class Session:
                 np.dot(delta, a["forward"]) / max(a["width"], a["height"]),
             ]
         )
-        if not visible(self.preview.depth, coords[None], 4 * model.SPAN / self.size)[0]:
-            self.error = msg(
-                "That point is outside supported frontal coverage. Choose a visible facial surface."
-            )
-            self.redraw()
+        if not np.isfinite(coords).all():
             return False
-        tri = self.face.vertices[self.face.triangles[index]]
-        weights = np.linalg.lstsq(np.vstack([tri.T, np.ones(3)]), np.append(hit, 1), rcond=None)[0]
-        weights = np.clip(weights, 0, 1)
-        weights /= weights.sum()
         self.project["landmarks"][name] = coords[:2].tolist()
-        self.project["authoring"]["anchors"][name] = {
-            "world": list(hit),
-            "barycentric": weights.tolist(),
-            "vertices": self.face.triangle_vertices[index].tolist(),
-        }
+        if index is None:
+            self.project["authoring"]["anchors"].pop(name, None)
+        else:
+            tri = self.face.vertices[self.face.triangles[index]]
+            weights = np.linalg.lstsq(np.vstack([tri.T, np.ones(3)]), np.append(hit, 1), rcond=None)[0]
+            weights = np.clip(weights, 0, 1)
+            weights /= weights.sum()
+            self.project["authoring"]["anchors"][name] = {
+                "world": list(hit),
+                "barycentric": weights.tolist(),
+                "vertices": self.face.triangle_vertices[index].tolist(),
+            }
         self.error = ""
         self.draft_due = time.perf_counter() + 0.5
         self.sync_launcher()
@@ -296,14 +301,6 @@ class Session:
 
     def fit(self, count=None):
         with self.edit(invalidate=False, stages=("FIT",)):
-            if any(
-                name not in self.project["authoring"]["anchors"]
-                for name in ("nose", "mouth", "chin")
-            ):
-                raise UserError("Place Nose, Mouth Center, and Chin on the face before fitting.")
-            nose, mouth, chin = (self.project["landmarks"][k][1] for k in ("nose", "mouth", "chin"))
-            if not nose > mouth > chin:
-                raise UserError("Place Nose above Mouth Center, and Mouth Center above Chin.")
             model.refit(self.project, count)
             self.direction, self.key_index, self.contour, self.point = model.LTR, 0, 0, 0
             self.changed()
@@ -345,12 +342,14 @@ class Session:
 
     def set_bake_uv(self, name):
         self.require_edit(("CONFIRM",))
-        if name == self.project["source"]["uv_map"]:
+        if name == self.project["source"]["uv_map"] and self.face.uvs is not None:
             return
         ref = deepcopy(self.project["source"])
         ref["uv_map"] = name
         with self.origin.override():
-            face = source.from_reference(ref, self.project["alignment"], allow_relink=True)
+            face = source.from_reference(
+                ref, self.project["alignment"], require_uv=True, allow_relink=True
+            )
         if face.reference["faces"] != self.face.reference["faces"] or any(
             not np.array_equal(getattr(face, field), getattr(self.face, field))
             for field in ("vertices", "triangles", "triangle_vertices", "projected")
@@ -381,9 +380,7 @@ class Session:
         self.normalize_selection(mirrored_progress)
         if changed_geometry:
             with self.origin.override():
-                self.face = source.from_reference(
-                    project["source"], project["alignment"], validate=self.stage != "ORIENT"
-                )
+                self.face = source.from_reference(project["source"], project["alignment"])
             self.refresh_projection()
             self.populate_reference()
         self.changed()
@@ -476,7 +473,7 @@ class Session:
         self.draft_due = time.perf_counter() + 0.5
         self.orbit_preview = False
         self.rotation = model.keyframe_rotation(self.direction, self.keyframe["progress"])
-        self.preview.render(validate=not dragging and self.stage == "EDIT")
+        self.preview.render()
         if self.editor and not dragging:
             self.editor.refresh_appearance()
         self.sync_launcher()

@@ -1,6 +1,4 @@
-"""Adaptive cubic flattening, contour validation, and scanline mask fills."""
-
-from .messages import UserError, contour_label
+"""Adaptive cubic flattening and even-odd scanline mask fills."""
 
 import numpy as np
 import json
@@ -85,38 +83,6 @@ def polygon(c, direction=LTR, tolerance=0.0005):
     return arr
 
 
-def self_intersects(poly):
-    n = len(poly)
-    if n < 3:
-        return True
-
-    def cross(a, b):
-        return a[0] * b[1] - a[1] * b[0]
-
-    for i in range(n):
-        a, b = poly[i], poly[(i + 1) % n]
-        if np.linalg.norm(a - b) < 1e-10:
-            return True
-        for j in range(i + 2, n):
-            if (j + 1) % n == i:
-                continue
-            c, d = poly[j], poly[(j + 1) % n]
-            if np.any(np.maximum(a, b) < np.minimum(c, d) - 1e-10) or np.any(
-                np.maximum(c, d) < np.minimum(a, b) - 1e-10
-            ):
-                continue
-            ab, cd = b - a, d - c
-            den = cross(ab, cd)
-            if abs(den) < 1e-12:
-                if abs(cross(c - a, ab)) < 1e-10:
-                    return True
-                continue
-            t, u = cross(c - a, cd) / den, cross(c - a, ab) / den
-            if -1e-9 <= t <= 1 + 1e-9 and -1e-9 <= u <= 1 + 1e-9:
-                return True
-    return False
-
-
 def fill_polygon(poly, size):
     # Scanlines visit intersections, rather than testing every edge at every pixel.
     ys = (np.arange(size, dtype=float) + 0.5) * SPAN / size - PAD
@@ -129,7 +95,7 @@ def fill_polygon(poly, size):
             intersections[i, active] = a[0] + (ys[active] - a[1]) * (b[0] - a[0]) / (b[1] - a[1])
     intersections.sort(axis=0)
     # Difference-array span fill avoids allocating an edges x height x width cube.
-    diff = np.zeros((size, size + 1), dtype=np.int16)
+    diff = np.zeros((size, size + 1), dtype=np.int32)
     rows = np.arange(size)
     for i in range(0, len(poly) - 1, 2):
         valid = np.isfinite(intersections[i + 1])
@@ -144,9 +110,9 @@ def fill_polygon(poly, size):
     return np.cumsum(diff[:, :-1], axis=1) > 0
 
 
-def raster_layers(frame, direction, size, validate=True, cache=None):
+def raster_layers(frame, direction, size, cache=None):
     """Local shadow and surviving explicit light after this frame's layers."""
-    key = (size, direction, validate, json.dumps(frame, sort_keys=True))
+    key = (size, direction, json.dumps(frame, sort_keys=True))
     if cache is not None and key in cache:
         result = cache.pop(key)
         cache[key] = result
@@ -157,11 +123,6 @@ def raster_layers(frame, direction, size, validate=True, cache=None):
         if not c["enabled"]:
             continue
         poly = polygon(c, direction, SPAN / (size * 4))
-        if validate and self_intersects(poly):
-            raise UserError(
-                "{name}: contour crosses itself or has coincident points.",
-                name=contour_label(c["name"]),
-            )
         shape = fill_polygon(poly, size)
         if c["operation"] == "ADD":
             mask |= shape
@@ -177,7 +138,7 @@ def raster_layers(frame, direction, size, validate=True, cache=None):
     return mask, light
 
 
-def inherited_light(project, frame, direction, size, validate=True, cache=None):
+def inherited_light(project, frame, direction, size, cache=None):
     """Explicit light carries only toward the start of this boundary sweep."""
     light = np.zeros((size, size), dtype=bool)
     for later in sweep(project, direction):
@@ -185,13 +146,13 @@ def inherited_light(project, frame, direction, size, validate=True, cache=None):
             c["closed"] and c["operation"] == "REMOVE" and c["enabled"]
             for c in later["contours"]
         ):
-            light |= raster_layers(later, direction, size, validate, cache)[1]
+            light |= raster_layers(later, direction, size, cache)[1]
     return light
 
 
-def raster_keyframe(project, frame, direction, size, validate=True, cache=None):
-    mask, _ = raster_layers(frame, direction, size, validate, cache)
-    return mask & ~inherited_light(project, frame, direction, size, validate, cache)
+def raster_keyframe(project, frame, direction, size, cache=None):
+    mask, _ = raster_layers(frame, direction, size, cache)
+    return mask & ~inherited_light(project, frame, direction, size, cache)
 
 
 def insert_point(c, segment):

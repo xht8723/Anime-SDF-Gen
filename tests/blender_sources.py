@@ -132,8 +132,10 @@ try:
     bpy.ops.object.mode_set(mode="OBJECT")
     uv_name = mesh.uv_layers.active.name
     mesh.uv_layers.remove(mesh.uv_layers.active)
-    failure(lambda: source.capture(obj, "VERTEX_GROUP", group.name), "UV map")
-    report["checks"].append("missing UVs rejected")
+    unwrapped = source.capture(obj, "VERTEX_GROUP", group.name)
+    assert unwrapped.uvs is None and unwrapped.reference["uv_map"] == ""
+    failure(lambda: source.from_reference(unwrapped.reference, unwrapped.alignment, require_uv=True), "UV map")
+    report["checks"].append("missing UVs permit capture and require a map only for baking")
     report["status"] = "PASS"
 except Exception:
     report["status"] = "FAIL"

@@ -22,6 +22,7 @@ class ExportJob:
         self.job = None
         self.paths = None
         self.message = ""
+        self.coverage_texels = None
 
     @property
     def running(self):
@@ -41,20 +42,25 @@ class ExportJob:
         s.preview.cancel()
         s.error, s.conflict = "", None
         self.paths = None
+        self.coverage_texels = None
         self.job = self._generate(project)
         s.safe_write_draft()
 
     def _generate(self, project):
         # Re-read before export to catch a changed source, pose, or UV layout.
         with self.session.origin.override():
-            face = source.from_reference(project["source"], project["alignment"])
+            face = source.from_reference(project["source"], project["alignment"], require_uv=True)
         size = project["settings"]["resolution"]
-        depth, facing = yield from projection_steps(face.projected, size)
+        front_only = project["source"]["front_only"]
+        depth, facing = yield from projection_steps(face.projected, size, front_only=front_only)
         threshold = yield from compile_steps(project, size, np.isfinite(depth))
         threshold = yield from smooth_steps(
             threshold, project["settings"]["smoothing"], project["mirror_sweeps"]
         )
-        image = yield from bake_steps(threshold, face.uvs, face.projected, depth, facing, size)
+        image = yield from bake_steps(
+            threshold, face.uvs, face.projected, depth, facing, size, front_only=front_only
+        )
+        self.coverage_texels = int(np.count_nonzero(image[..., 2]))
         image = yield from pad_steps(
             image, max(1, round(project["settings"]["padding"] * size / 2048))
         )

@@ -75,7 +75,10 @@ class Sidebar:
         row([("FILENAME", raw(destination.name))])
         self.y -= 10 * u
         heading(mark("Bake UV map"))
-        row([("BAKE_UV", raw(s.project["source"]["uv_map"]))])
+        row([("BAKE_UV", raw(s.project["source"]["uv_map"]) if s.project["source"]["uv_map"]
+              else mark("Choose a UV map…"))])
+        if s.face.uvs is None:
+            self.note(mark("Choose an existing UV map before exporting. Drawing and saving remain available."))
         self.y -= 10 * u
         heading(mark("Texture resolution"))
         resolution = s.project["settings"]["resolution"]

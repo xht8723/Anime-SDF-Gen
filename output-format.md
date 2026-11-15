@@ -1,6 +1,6 @@
 # Anime SDF Gen — texture and project format
 
-Version 0.20.0 writes configurable PNG8/PNG16/EXR32 textures and project schema 4. Each threshold map represents a complete boundary sweep. Curve selection and pending transforms are transient editor state and are not serialized into the project. The preview projects a lit/unlit mask; its colors and smooth shading are not written into the texture data.
+Version 0.21.0 writes configurable PNG8/PNG16/EXR32 textures and project schema 4. Each threshold map represents a complete boundary sweep. Curve selection and pending transforms are transient editor state and are not serialized into the project. The preview projects a lit/unlit mask; its colors and smooth shading are not written into the texture data.
 
 ## Image
 
@@ -18,7 +18,7 @@ The numerical writers use Python/NumPy only. Files contain RGB channels or one g
 |---|---|---|
 | `character_left` | R | Left → Right boundary sweep; light on the character's left hemisphere |
 | `character_right` | G | Right → Left boundary sweep; light on the character's right hemisphere |
-| `face_coverage` | B | Coverage of the selected, projectable face in UV space |
+| `face_coverage` | B | Rasterized coverage of the selected face in the 0–1 UV tile, restricted by frontal filtering only when enabled |
 
 In Confirm, each logical map can use **R**, **G**, **B**, or **Separate**. An RGB channel has one owner; selecting an occupied channel swaps assignments. Multiple maps can be Separate. Packing choices are independent of authoring symmetry.
 
@@ -30,7 +30,9 @@ For example, Left → B, Right → Separate, Coverage → R writes a packed file
 
 Both directional maps are baked to the selected existing UV map. Do not flip U for the right map: mirroring has already been incorporated into the authored result.
 
-Select **Bake UV map** in Orientation's **Source / UV…** dialog or directly in Confirm. The choice uses the existing `source.uv_map` and `authoring.uv_map` fields in schema 4. It does not change the source mesh's active/render UV defaults or material texture inputs. Overlaps are permitted: later valid triangle samples overwrite earlier values at shared texels. Invalid or occluded samples do not erase earlier valid samples. The projected preview remains independent of UV placement.
+Select **Bake UV map** in Orientation's **Source / UV…** dialog or directly in Confirm. The choice uses the existing `source.uv_map` and `authoring.uv_map` fields in schema 4. It does not change the source mesh's active/render UV defaults or material texture inputs. Overlaps are permitted: later valid triangle samples overwrite earlier values at shared texels. Skipped samples do not erase earlier valid samples. The projected preview remains independent of UV placement.
+
+UV triangles are clipped to the 0–1 tile. Zero-area triangles and triangles entirely outside the tile write no samples; coordinates must be finite. There is no UDIM remapping. An export with no samples is valid: directional backgrounds remain 1 (always lit), coverage remains 0, and the completion card reports zero baked texels.
 
 Internally, face coordinates use `u=0` at viewer left, `u=1` at viewer right, and `v=0` at the bottom. The right vector of the projection is `up × forward`, which points toward the character's left. The sidecar stores the complete orthonormal frame, center, width, and height.
 
@@ -107,7 +109,7 @@ alpha = -d0 / (d1 - d0)
 threshold = p0 + alpha * (p1 - p0)
 ```
 
-Distances are computed in the common face plane before coverage clipping or UV transfer. UV triangles use barycentric interpolation into that plane. Front-facing depth coverage rejects hidden samples within the raster tolerance. Preview and export share this implementation at different resolutions.
+Distances are computed in the common face plane before UV transfer. UV triangles use barycentric interpolation into that plane, including back-facing, occluded and degenerate 3D triangles. All selected geometry receives the projection by default. **Frontal surface only**, default off, restricts the mesh to front-facing triangles and rejects hidden samples using a depth tolerance. The preview uses the same option and tolerance at its working resolution.
 
 ### Optional threshold smoothing
 
@@ -123,7 +125,7 @@ The authoring preview rasterizes its current projected mask at 512 pixels. Cache
 
 `.sdfproject.json` files have `format: "anime_sdf_gen"` and `format_version: 4`, with these principal sections:
 
-- `source`: blend/object/mesh names, captured polygon IDs, region (`SELECTED` or `VERTEX_GROUP`), optional vertex-group name, frontal-subset setting, UV name, and a SHA256 of evaluated coordinates, triangles, and UVs.
+- `source`: blend/object/mesh names, captured polygon IDs, region (`SELECTED` or `VERTEX_GROUP`), optional vertex-group name, frontal-filter setting, UV name, and `fingerprint` containing geometry and UV SHA256 digests separated by `:`. Geometry remains independently checkable when a saved UV map is missing. UV names may be empty for authoring; export requires a finite existing map.
 - `alignment`: orthonormal head frame, center, width, and height.
 - `landmarks`: normalized nose, mouth, and chin positions.
 - `authoring`: `stage` (`ORIENT`, `FIT`, `EDIT`, `CONFIRM`, `REORIENT`, or `REFIT`), `reference` (`NEUTRAL` or `MATERIAL`), initial/refit `keyframe_count` per sweep, pending orientation choices `uv_map` and `front_only`, and named surface `anchors`. `REORIENT` and `REFIT` display the same first two steps while retaining an explicit return-to-existing-curves route. They do not rebuild boundaries unless the artist chooses Refit. Each anchor stores a world position, original triangle vertex indices, and three barycentric weights. No Blender pointer is serialized. Generated sidecars reopen in Confirm; use Back to edit their curves.

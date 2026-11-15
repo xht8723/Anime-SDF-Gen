@@ -99,7 +99,7 @@ def workflow():
         event("MOUSEMOVE", "NOTHING", (start[0] + (i + 1) * 2, start[1]))
         yield 0.025
         revisions.append(s.preview.mask_revision)
-        expected = curves.raster_keyframe(s.project, s.keyframe, s.direction, s.size, False)
+        expected = curves.raster_keyframe(s.project, s.keyframe, s.direction, s.size)
         np.testing.assert_array_equal(s.preview.rgba[..., 0], expected)
     assert s.dragging and not np.array_equal(s.preview.rgba, original)
     assert len(set(revisions)) > 10

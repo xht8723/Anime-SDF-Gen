@@ -24,6 +24,7 @@ https://github.com/user-attachments/assets/7cbefedc-edcd-4a6f-b7d6-56ef065f0153
 - Safe return from setup, explicit refitting, named shapes, and separate editing/playback frame cues.
 - 8/16-bit PNG and 32-bit float EXR export, with RGB packing or separate maps.
 - Choose the bake UV map in Orientation or Confirm. Mirrored and overlapping UVs are allowed; shared texels use the last valid triangle sample.
+- Author without UVs and select a map before export. Collapsed UVs and out-of-tile areas are skipped. All selected surfaces receive the shadow projection by default; frontal filtering is optional.
 - Optional threshold smoothing with a live Confirm preview; off by default.
 - Editable project files for saving and continuing your work.
 - English and Simplified Chinese UI, following Blender’s language settings with live switching and artist-focused Chinese labels and explanations.
@@ -43,7 +44,7 @@ Requires **Blender 5.2 or newer**. Tested on **Windows**.
 4. Review the result with the live preview and 360° playback.
 5. Choose resolution, output precision and channel packing, optionally adjust smoothing, then export.
 
-Version 0.20.0 exports PNG or EXR textures and an editable project file. Output defaults to 16-bit PNG with smoothing off. Shader setup is manual; the texture format guide explains how to use the maps.
+Version 0.21.0 exports PNG or EXR textures and an editable project file. Output defaults to 16-bit PNG with smoothing off. Shader setup is manual; the texture format guide explains how to use the maps.
 
 ## Documentation
 

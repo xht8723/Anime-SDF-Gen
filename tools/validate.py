@@ -166,6 +166,7 @@ def main(argv=None):
         if suite in ("guards", "all"):
             blender("guards", "blender_guards.py", ("guards/guards.json",))
         if suite in ("uv", "all"):
+            blender("permissive", "blender_permissive.py", ("permissive/permissive.json",))
             blender("uv-selection", "blender_uv_selection.py", ("uv-selection/uv-selection.json",))
             blender(
                 "bugs-export", "blender_bugs_export.py", ("bugs-export/bugs-export.json",),
@@ -207,6 +208,14 @@ def main(argv=None):
                     ("full-sweeps-2k/full-sweeps.json",), gui=True,
                 )
         if suite in ("dialogs", "ui", "all"):
+            for name, size, scale in (
+                ("permissive-ui-2k", (2560, 1600), "1.0"),
+                ("permissive-ui-4k", (3840, 2160), "1.5"),
+            ):
+                blender(
+                    name, "blender_permissive_ui.py", (name + "/permissive-ui.json",),
+                    gui=True, size=size, extra=("--case", name, "--ui-scale", scale),
+                )
             for name, size, scale in (
                 ("native-dialogs-2k", (2560, 1600), "1.0"),
                 ("native-dialogs-4k", (3840, 2160), "1.5"),

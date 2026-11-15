@@ -59,6 +59,8 @@ try:
         uv.data.foreach_set("uv", values.ravel())
     mesh.uv_layers.new(name="Invalid")
     mesh.uv_layers["Invalid"].data.foreach_set("uv", np.zeros(coords.size))
+    mesh.uv_layers.new(name="Nonfinite")
+    mesh.uv_layers["Nonfinite"].data.foreach_set("uv", np.full(coords.size, np.nan))
     # Active and render maps deliberately differ; both must survive bake choices.
     original_render = "Bake_A"
     mesh.uv_layers.active = mesh.uv_layers[original_active]
@@ -98,7 +100,10 @@ try:
         "UV switch preserves artwork, fit, selection, history, playback, caches and material UVs"
     )
 
-    for name in ("missing", "Invalid"):
+    s.set_bake_uv("Invalid")
+    assert not s.face.uvs.any()
+    s.set_bake_uv("Bake_A")
+    for name in ("missing", "Nonfinite"):
         before, caches = s.checkpoint(), cache_ids(s)
         try:
             s.set_bake_uv(name)
